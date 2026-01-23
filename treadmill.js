@@ -44,6 +44,34 @@ function loadSessions() {
 function saveSessions(sessions) {
     localStorage.setItem('treadmill_sessions', JSON.stringify(sessions));
 }
+// Auto-save sessions to a downloadable JSON file every X minutes
+function autoSaveSessionsToFile() {
+    const sessions = loadSessions();
+    if (sessions.length === 0) return; // nothing to save
+
+    const jsonString = JSON.stringify(sessions, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    // Filename with current date for easy sorting
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    a.download = `pitpat-sessions-${today}.json`;
+    
+    document.body.appendChild(a);
+    a.click();
+    
+    // Clean up
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 100);
+
+    console.log('Auto-saved sessions JSON');
+    // Optional: show a small toast notification
+    showToast('Auto-saved session history');
+}
 function addSession(session) {
     const sessions = loadSessions();
     sessions.unshift(session); // newest first
