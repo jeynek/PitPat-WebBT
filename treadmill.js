@@ -55,13 +55,17 @@ function autoSaveSessionsToFile() {
 
     const a = document.createElement('a');
     a.href = url;
-    // Filename with current date for easy sorting
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    a.download = `pitpat-sessions-${today}.json`;
-    
+
+    // Filename with date + time (hour-minute-second) to avoid duplicates
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '-'); // HH-MM-SS
+
+    a.download = `pitpat-sessions-\( {dateStr}_ \){timeStr}.json`;
+
     document.body.appendChild(a);
     a.click();
-    
+
     // Clean up
     setTimeout(() => {
         document.body.removeChild(a);
@@ -69,7 +73,6 @@ function autoSaveSessionsToFile() {
     }, 100);
 
     console.log('Auto-saved sessions JSON');
-    // Optional: show a small toast notification
     showToast('Auto-saved session history');
 }
 function addSession(session) {
