@@ -589,6 +589,11 @@ function finishSession(reason) {
     sessionActive = false;
     sessionStartData = null;
     // No need to do anything else, as the session is already up-to-date in treadmill_sessions
+    
+    // NEW: Auto-download the full history as JSON
+    autoSaveSessionsToFile();
+    
+    showToast(`Session ${status}. History auto-saved.`);
 }
 
 // On page load, check for an unfinished session and restore it if present
