@@ -628,3 +628,22 @@ function showToast(message, timeout = 4000) {
         alert(message); // fallback
     }
 }
+// Near where sessions are added/updated (e.g., in processData or similar)
+function autoSaveSessions() {
+    const sessions = getSessions(); // whatever function gets the current sessions array
+    const json = JSON.stringify(sessions, null, 2);
+    const blob = new Blob([json], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pitpat-sessions-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    console.log('Auto-saved JSON');
+}
+
+// Call it periodically (every 5 min) or on session end
+setInterval(autoSaveSessions, 5 * 60 * 1000); // 5 minutes
+// Or better: call it when a new session is added or treadmill stops
