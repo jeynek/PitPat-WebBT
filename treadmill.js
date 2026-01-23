@@ -56,17 +56,16 @@ function autoSaveSessionsToFile() {
     const a = document.createElement('a');
     a.href = url;
 
-    // Correct filename: pitpat-sessions-YYYY-MM-DD_HH-MM-SS.json
+    // Correct template literal – MUST use backticks ` ` and ${} without extra spaces or parentheses
     const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10);               // 2026-01-23
-    const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '-'); // 14-35-12
+    const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '-'); // HH-MM-SS
 
     a.download = `pitpat-sessions-\( {dateStr}_ \){timeStr}.json`;
 
     document.body.appendChild(a);
     a.click();
 
-    // Clean up
     setTimeout(() => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
@@ -74,7 +73,7 @@ function autoSaveSessionsToFile() {
 
     console.log('Auto-saved sessions JSON');
     showToast('Auto-saved session history');
-}     
+}
 function addSession(session) {
     const sessions = loadSessions();
     sessions.unshift(session); // newest first
