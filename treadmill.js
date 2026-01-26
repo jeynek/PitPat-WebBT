@@ -61,7 +61,7 @@ function autoSaveSessionsToFile() {
     const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
     const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '-'); // HH-MM-SS
 
-    a.download = `pitpat-sessions-\( {dateStr}_ \){timeStr}.json`;
+    a.download = `pitpat-sessions-(${dateStr}_${timeStr}).json`;
 
     document.body.appendChild(a);
     a.click();
