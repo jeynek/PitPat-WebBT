@@ -61,7 +61,7 @@ function autoSaveSessionsToFile() {
     const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
     const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '-'); // HH-MM-SS
 
-    a.download = `pitpat-sessions-\( {dateStr}_ \){timeStr}.json`;
+    a.download = `pitpat-sessions-${dateStr}_${timeStr}.json`;
 
     document.body.appendChild(a);
     a.click();
@@ -212,7 +212,7 @@ function formatDuration(seconds) {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
-    let parts = [];
+    let parts = ";
     if (h > 0) parts.push(h + 'h');
     if (m > 0 || h > 0) parts.push(m + 'm');
     parts.push(s + 's');
@@ -314,7 +314,7 @@ function handleNotification(event) {
     for (let i = 0; i < value.byteLength; ++i) {
         hexStr.push(value.getUint8(i).toString(16).padStart(2, "0"));
     }
-    console.log("Payload (hex):", hexStr.join(" "));
+    console.log("Payload (hex):", hexStr.join(" " ));
     // Parse treadmill data from value (see treadmill_data.py for structure)
     if (value.byteLength < 31) {
         treadmillData = {
@@ -421,7 +421,7 @@ function handleNotification(event) {
     // --- Heartbeat/data send logic, like _notification_handler ---
     if (writeChar) {
         if (pendingData) {
-            console.log("Sending pending data packet:", Array.from(pendingData).map(b => b.toString(16).padStart(2, "0")).join(" "));
+            console.log("Sending pending data packet:", Array.from(pendingData).map(b => b.toString(16).padStart(2, "0")).join(" ")));
             writeChar.writeValue(pendingData).then(() => {
                 console.log("Pending data sent.");
                 pendingData = null;
@@ -431,7 +431,7 @@ function handleNotification(event) {
         } else {
             // Heartbeat packet: 6a05fdf843
             const heartbeat = new Uint8Array([0x6a, 0x05, 0xfd, 0xf8, 0x43]);
-            console.log("Sending heartbeat packet:", Array.from(heartbeat).map(b => b.toString(16).padStart(2, "0")).join(" "));
+            console.log("Sending heartbeat packet:", Array.from(heartbeat).map(b => b.toString(16).padStart(2, "0")).join(" ")));
             writeChar.writeValue(heartbeat).catch(err => {
                 console.error("Failed to send heartbeat:", err);
             });
@@ -442,7 +442,7 @@ function handleNotification(event) {
 async function sendCommand(packet) {
     if (!writeChar) return;
     try {
-        console.log("Sending command packet:", Array.from(packet).map(b => b.toString(16).padStart(2, "0")).join(" "));
+        console.log("Sending command packet:", Array.from(packet).map(b => b.toString(16).padStart(2, "0")).join(" ")));
         await writeChar.writeValue(packet);
     } catch (err) {
         console.error("Failed to send command:", err);
@@ -595,7 +595,7 @@ function finishSession(reason) {
     // NEW: Auto-download the full history as JSON
     autoSaveSessionsToFile();
     
-    showToast(`Session ${status}. History auto-saved.`);
+    showToast(`Session ${reason}. History auto-saved.`);
 }
 
 // On page load, check for an unfinished session and restore it if present
