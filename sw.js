@@ -1,4 +1,8 @@
-// Simple service worker to allow PWA installation
-self.addEventListener('fetch', (event) => {
-    // This can be empty, but must exist
+self.addEventListener('install', (e) => {
+  console.log('[Service Worker] Install');
+});
+
+self.addEventListener('fetch', (e) => {
+  // This allows the app to be "installable"
+  e.respondWith(fetch(e.request));
 });
