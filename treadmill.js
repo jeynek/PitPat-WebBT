@@ -668,4 +668,16 @@ function showToast(message, timeout = 4000) {
 setInterval(autoSaveSessionsToFile, 5 * 60 * 1000);
 
 // Optional: also save immediately when the page loads (useful for testing)
-setTimeout(autoSaveSessionsToFile, 10000); // after 10 seconds
+//setTimeout(autoSaveSessionsToFile, 10000); // after 10 seconds
+// Manual upload button
+const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
+if (uploadToTaskerBtn) {
+    uploadToTaskerBtn.addEventListener('click', () => {
+        try {
+            window.location.href = 'tasker://launch=:=PitPat_Upload_Steps';
+            showToast('Launching Tasker upload...');
+        } catch (err) {
+            showToast('Failed to launch Tasker: ' + err);
+        }
+    });
+}
