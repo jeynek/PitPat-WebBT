@@ -674,7 +674,12 @@ const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
 if (uploadToTaskerBtn) {
     uploadToTaskerBtn.addEventListener('click', () => {
         try {
-            window.location.href = 'tasker://launch=:=PitPat_Upload_Steps';
+            const a = document.createElement('a');
+            a.href = 'tasker://launch=:=PitPat_Upload_Steps';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
             showToast('Launching Tasker upload...');
         } catch (err) {
             showToast('Failed to launch Tasker: ' + err);
