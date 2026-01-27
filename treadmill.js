@@ -675,7 +675,7 @@ if (uploadToTaskerBtn) {
     uploadToTaskerBtn.addEventListener('click', () => {
         try {
             const a = document.createElement('a');
-            a.href = 'tasker://launch=:=PitPat_Upload_Steps';
+            a.href = 'intent://launch=:=PitPat_Upload_Steps#Intent;scheme=tasker;end';
             a.style.display = 'none';
             document.body.appendChild(a);
             a.click();
