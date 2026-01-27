@@ -672,20 +672,19 @@ setInterval(autoSaveSessionsToFile, 5 * 60 * 1000);
 // Manual upload button
 const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
 if (uploadToTaskerBtn) {
-    uploadToTaskerBtn.addEventListener('click', () => {
-        try {
-            // Spróbuj różnych formatów
-            const urls = [
-                'tasker://launch=:=PitPat_Upload_Steps',
-                'intent:#Intent;action=net.dinglisch.android.tasker.ACTION_TASK;S.task_name=PitPat_Upload_Steps;end',
-                'tasker://secondary?taskName=PitPat_Upload_Steps'
-            ];
-            
-            // Próbuj pierwszy URL
-            window.open(urls[0], '_self');
-            showToast('Launching Tasker upload...');
-        } catch (err) {
-            showToast('Failed to launch Tasker: ' + err);
+    uploadToTaskerBtn.addEventListener('click', async () => {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'Upload to Google Fit',
+                    text: 'pitpat_upload_trigger'
+                });
+                showToast('Select Tasker from share menu');
+            } catch (err) {
+                showToast('Share cancelled');
+            }
+        } else {
+            showToast('Share API not available');
         }
     });
 }
