@@ -670,7 +670,7 @@ setInterval(autoSaveSessionsToFile, 5 * 60 * 1000);
 // Optional: also save immediately when the page loads (useful for testing)
 //setTimeout(autoSaveSessionsToFile, 10000); // after 10 seconds
 // Manual upload button
-const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
+/*-const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
 if (uploadToTaskerBtn) {
     uploadToTaskerBtn.addEventListener('click', async () => {
         if (navigator.share) {
@@ -688,3 +688,8 @@ if (uploadToTaskerBtn) {
         }
     });
 }
+>*/
+uploadToTaskerBtn.onclick = () => {
+  window.location.href =
+    'tasker://assistantactions?task=PitPat_Upload_Steps';
+};
