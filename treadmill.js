@@ -674,15 +674,15 @@ const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
 if (uploadToTaskerBtn) {
     uploadToTaskerBtn.addEventListener('click', () => {
         try {
-            const iframe = document.createElement('iframe');
-            iframe.style.display = 'none';
-            iframe.src = 'tasker://launch=:=PitPat_Upload_Steps';
-            document.body.appendChild(iframe);
+            // Spróbuj różnych formatów
+            const urls = [
+                'tasker://launch=:=PitPat_Upload_Steps',
+                'intent:#Intent;action=net.dinglisch.android.tasker.ACTION_TASK;S.task_name=PitPat_Upload_Steps;end',
+                'tasker://secondary?taskName=PitPat_Upload_Steps'
+            ];
             
-            setTimeout(() => {
-                document.body.removeChild(iframe);
-            }, 1000);
-            
+            // Próbuj pierwszy URL
+            window.open(urls[0], '_self');
             showToast('Launching Tasker upload...');
         } catch (err) {
             showToast('Failed to launch Tasker: ' + err);
