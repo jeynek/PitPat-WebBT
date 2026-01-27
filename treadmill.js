@@ -674,12 +674,15 @@ const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
 if (uploadToTaskerBtn) {
     uploadToTaskerBtn.addEventListener('click', () => {
         try {
-            const a = document.createElement('a');
-            a.href = 'intent://launch=:=PitPat_Upload_Steps#Intent;scheme=tasker;end';
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = 'tasker://launch=:=PitPat_Upload_Steps';
+            document.body.appendChild(iframe);
+            
+            setTimeout(() => {
+                document.body.removeChild(iframe);
+            }, 1000);
+            
             showToast('Launching Tasker upload...');
         } catch (err) {
             showToast('Failed to launch Tasker: ' + err);
