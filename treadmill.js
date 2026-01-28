@@ -498,7 +498,17 @@ function makePacket(type, speed = 1000) {
  * @param {Object} sessionData - The session data to upload
  * @returns {Promise<Object>} Response from the server
  */
+async function emptyPost() {
+    try {
+        showToast('Pinging 1821...');
+        await fetch('http://127.0.0.1:1821/', { method: 'POST' });
+        showToast('Done');
+    } catch (err) {
+        showToast('Failed: ' + err.message, 5000);
+    }
+}
 async function uploadSessionToServer(sessionData) {
+    emptyPost();
     try {
         showToast('Uploading session to server...');
         
@@ -519,7 +529,7 @@ async function uploadSessionToServer(sessionData) {
         showToast('Session uploaded successfully!');
         return result;
     } catch (error) {
-        showToast('Upload failed: ' + error.message, 5000);
+        showToast('Upload not done: ' + error.message, 5000);
         throw error;
     }
 }
