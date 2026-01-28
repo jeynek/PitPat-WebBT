@@ -504,6 +504,8 @@ async function uploadSessionToServer(sessionData) {
         
         const response = await fetch(SERVER_URL, {
             method: 'POST',
+            mode: 'cors',
+            targetAddressSpace: 'loopback',
             headers: {
                 'Content-Type': 'application/json',
             },
