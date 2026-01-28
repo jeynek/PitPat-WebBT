@@ -510,21 +510,19 @@ async function uploadSessionToServer(sessionData) {
             body: JSON.stringify(sessionData)
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        const result = await response.text();
+        
+        if (result.trim() !== 'OK') {
+            throw new Error(`Unexpected response: ${result}`);
         }
-
-        const result = await response.json();
-        console.log('Upload successful:', result);
+        
         showToast('Session uploaded successfully!');
         return result;
     } catch (error) {
-        console.error('Upload failed:', error);
-        showToast('Upload failed: ' + error.message);
+        showToast('Upload failed: ' + error.message, 5000);
         throw error;
     }
 }
-
 /**
  * Upload all sessions to server
  */
