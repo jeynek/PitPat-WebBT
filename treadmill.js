@@ -28,6 +28,10 @@ const importHistoryBtn = document.getElementById('importHistoryBtn');
 const exportHistoryBtn = document.getElementById('exportHistoryBtn');
 const importHistoryInput = document.getElementById('importHistoryInput');
 const snackbar = document.getElementById('snackbar');
+const uploadToServerBtn = document.getElementById('uploadToServerBtn');
+
+// --- Configuration for HTTP POST ---
+const SERVER_URL = 'http://127.0.0.1:1821/';
 
 // --- Session History Logic ---
 let sessionActive = false;
@@ -43,6 +47,36 @@ function loadSessions() {
 }
 function saveSessions(sessions) {
     localStorage.setItem('treadmill_sessions', JSON.stringify(sessions));
+}
+// Auto-save sessions to a downloadable JSON file every X minutes
+function autoSaveSessionsToFile() {
+    const sessions = loadSessions();
+    if (sessions.length === 0) return; // nothing to save
+
+    const jsonString = JSON.stringify(sessions, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+
+    // Correct template literal – MUST use backticks ` ` and ${} without extra spaces or parentheses
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '-'); // HH-MM-SS
+
+    a.download = `pitpat-sessions-(${dateStr}_${timeStr}).json`;
+
+    document.body.appendChild(a);
+    a.click();
+
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 100);
+
+    console.log('Auto-saved sessions JSON');
+    showToast('Auto-saved session history');
 }
 function addSession(session) {
     const sessions = loadSessions();
@@ -458,6 +492,64 @@ function makePacket(type, speed = 1000) {
     return arr;
 }
 
+// --- HTTP POST Function ---
+/**
+ * Sends session data to a server via HTTP POST
+ * @param {Object} sessionData - The session data to upload
+ * @returns {Promise<Object>} Response from the server
+ */
+async function uploadSessionToServer(sessionData) {
+    try {
+        showToast('Uploading session to server...');
+        
+        const response = await fetch(SERVER_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(sessionData)
+        });
+
+        const result = await response.text();
+        
+        if (result.trim() !== 'OK') {
+            throw new Error(`Unexpected response: ${result}`);
+        }
+        
+        showToast('Session uploaded successfully!');
+        return result;
+    } catch (error) {
+        showToast('Upload failed: ' + error.message, 5000);
+        throw error;
+    }
+}
+/**
+ * Upload all sessions to server
+ */
+async function uploadAllSessionsToServer() {
+    const sessions = loadSessions();
+    
+    if (sessions.length === 0) {
+        showToast('No sessions to upload');
+        return;
+    }
+
+    try {
+        const payload = {
+            sessions: sessions,
+            uploadDate: new Date().toISOString(),
+            deviceInfo: {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform
+            }
+        };
+
+        await uploadSessionToServer(payload);
+    } catch (error) {
+        // Error already handled in uploadSessionToServer
+    }
+}
+
 // --- UI Event Handlers ---
 connectBtn.addEventListener('click', () => {
     if (!connected) connectBluetooth();
@@ -528,6 +620,13 @@ speedSlider.addEventListener('change', () => {
     send_data(makePacket("set_speed", curTargetSpeed));
 });
 
+// --- Upload to Server Button Handler ---
+if (uploadToServerBtn) {
+    uploadToServerBtn.addEventListener('click', async () => {
+        await uploadAllSessionsToServer();
+    });
+}
+
 // --- Initialize ---
 updateDashboard({});
 updateRunningState(3);
@@ -561,6 +660,11 @@ function finishSession(reason) {
     sessionActive = false;
     sessionStartData = null;
     // No need to do anything else, as the session is already up-to-date in treadmill_sessions
+    
+    // NEW: Auto-download the full history as JSON
+    autoSaveSessionsToFile();
+    
+    showToast(`Session ${reason}. History auto-saved.`);
 }
 
 // On page load, check for an unfinished session and restore it if present
@@ -627,4 +731,36 @@ function showToast(message, timeout = 4000) {
     } else {
         alert(message); // fallback
     }
+}
+// Start auto-save every 5 minutes (300000 ms)
+// You can change to 10 minutes: 600000, etc.
+setInterval(autoSaveSessionsToFile, 5 * 60 * 1000);
+
+// Optional: also save immediately when the page loads (useful for testing)
+//setTimeout(autoSaveSessionsToFile, 10000); // after 10 seconds
+// Manual upload button
+/*-const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
+if (uploadToTaskerBtn) {
+    uploadToTaskerBtn.addEventListener('click', async () => {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'Upload to Google Fit',
+                    text: 'pitpat_upload_trigger'
+                });
+                showToast('Select Tasker from share menu');
+            } catch (err) {
+                showToast('Share cancelled');
+            }
+        } else {
+            showToast('Share API not available');
+        }
+    });
+}
+>*/
+const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
+if (uploadToTaskerBtn) {
+    uploadToTaskerBtn.onclick = () => {
+        window.location.href = 'tasker://assistantactions?task=PitPat_Upload_Steps';
+    };
 }
