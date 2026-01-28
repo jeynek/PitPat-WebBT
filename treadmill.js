@@ -5,11 +5,6 @@ const SERVICE_UUID = "0000fba0-0000-1000-8000-00805f9b34fb";
 const NOTIFY_CHAR_UUID = "0000fba2-0000-1000-8000-00805f9b34fb";
 const WRITE_CHAR_UUID = "0000fba1-0000-1000-8000-00805f9b34fb";
 
-// --- Treadmill to Tasker integration ---
-const TASKER_POST_URL = 'http://127.0.0.1:1821/';
-const DELTA_INTERVAL_MS = 5 * 60 * 1000;          // 5 minutes
-const STRIDE_LENGTH_METERS = 0.75;                // average stride – change if needed
-
 // --- UI Elements ---
 const connectBtn = document.getElementById('connectBtn');
 const statusDiv = document.getElementById('status');
@@ -49,10 +44,10 @@ function loadSessions() {
 function saveSessions(sessions) {
     localStorage.setItem('treadmill_sessions', JSON.stringify(sessions));
 }
-
+// Auto-save sessions to a downloadable JSON file every X minutes
 function autoSaveSessionsToFile() {
     const sessions = loadSessions();
-    if (sessions.length === 0) return;
+    if (sessions.length === 0) return; // nothing to save
 
     const jsonString = JSON.stringify(sessions, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
@@ -61,11 +56,12 @@ function autoSaveSessionsToFile() {
     const a = document.createElement('a');
     a.href = url;
 
+    // Correct template literal – MUST use backticks ` ` and ${} without extra spaces or parentheses
     const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10);
-    const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '-');
+    const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '-'); // HH-MM-SS
 
-    a.download = `pitpat-sessions-(\( {dateStr}_ \){timeStr}).json`;
+    a.download = `pitpat-sessions-(${dateStr}_${timeStr}).json`;
 
     document.body.appendChild(a);
     a.click();
@@ -78,21 +74,18 @@ function autoSaveSessionsToFile() {
     console.log('Auto-saved sessions JSON');
     showToast('Auto-saved session history');
 }
-
 function addSession(session) {
     const sessions = loadSessions();
-    sessions.unshift(session);
+    sessions.unshift(session); // newest first
     saveSessions(sessions);
     renderSessionTable();
 }
-
 function deleteSession(idx) {
     const sessions = loadSessions();
     sessions.splice(idx, 1);
     saveSessions(sessions);
     renderSessionTable();
 }
-
 function renderSessionTable() {
     const sessions = loadSessions();
     historyTableBody.innerHTML = '';
@@ -128,45 +121,43 @@ let notifyChar = null;
 let writeChar = null;
 let treadmillData = {};
 let connected = false;
-let runningState = 3;
-let curTargetSpeed = 1000;
-
-// Delta tracking for Tasker
-let lastSentDistanceMeters = 0;
-let lastSentTime = 0;
+let runningState = 3; // 0: Starting, 1: Running, 2: Paused, 3: Stopped
+let curTargetSpeed = 1000; // in treadmill units
 
 // --- Helper Functions ---
 
 function setStatus(msg) {
     let displayMsg = msg;
-    if (msg.toLowerCase().includes('connecting')) displayMsg = 'Connecting';
-    else if (msg.toLowerCase().includes('not connected') || msg.toLowerCase().includes('disconnect')) displayMsg = 'Disconnected';
-    else if (msg.toLowerCase().includes('paused')) displayMsg = 'Paused';
-    else if (msg.toLowerCase().includes('running')) displayMsg = 'Running';
-    else if (msg.toLowerCase().includes('stopped')) displayMsg = 'Stopped';
-
+    if (msg.toLowerCase().includes('connecting')) {
+        displayMsg = 'Connecting';
+    } else if (msg.toLowerCase().includes('not connected') || msg.toLowerCase().includes('disconnect')) {
+        displayMsg = 'Disconnected';
+    } else if (msg.toLowerCase().includes('paused')) {
+        displayMsg = 'Paused';
+    } else if (msg.toLowerCase().includes('running')) {
+        displayMsg = 'Running';
+    } else if (msg.toLowerCase().includes('stopped')) {
+        displayMsg = 'Stopped';
+    }
     if (statusChip) {
         statusChip.querySelector('.mdl-chip__text').textContent = displayMsg;
         statusChip.classList.remove('chip-connected', 'chip-connecting', 'chip-disconnected', 'chip-paused');
-        if (displayMsg === 'Running') statusChip.classList.add('chip-connected');
-        else if (displayMsg === 'Connecting') statusChip.classList.add('chip-connecting');
-        else if (displayMsg === 'Paused') statusChip.classList.add('chip-paused');
-        else statusChip.classList.add('chip-disconnected');
+        if (displayMsg === 'Running') {
+            statusChip.classList.add('chip-connected');
+        } else if (displayMsg === 'Connecting') {
+            statusChip.classList.add('chip-connecting');
+        } else if (displayMsg === 'Paused') {
+            statusChip.classList.add('chip-paused');
+        } else {
+            statusChip.classList.add('chip-disconnected');
+        }
     }
 }
-
 function updateDashboard(data) {
     speedDiv.textContent = data.speed || '-';
     distanceDiv.textContent = data.distance || '-';
     caloriesDiv.textContent = data.calories || '-';
-
-    // Show estimated steps instead of real (always 0) steps
-    if (sessionActive && sessionStartData && sessionStartData.estimatedSteps !== undefined) {
-        stepsDiv.textContent = sessionStartData.estimatedSteps.toLocaleString('pl-PL');
-    } else {
-        stepsDiv.textContent = '-';
-    }
-
+    stepsDiv.textContent = (data.steps !== undefined && data.steps !== null) ? data.steps : '-';
     if (data.duration && typeof data.duration === 'number') {
         durationDiv.textContent = formatDuration(data.duration);
     } else if (typeof data.duration === 'string' && !isNaN(parseFloat(data.duration))) {
@@ -175,7 +166,6 @@ function updateDashboard(data) {
         durationDiv.textContent = data.duration || '-';
     }
 }
-
 function enableControls(enable) {
     startBtn.disabled = !enable;
     stopBtn.disabled = !enable;
@@ -183,7 +173,6 @@ function enableControls(enable) {
     speedDownBtn.disabled = !enable;
     speedSlider.disabled = !enable;
 }
-
 function updateRunningState(state) {
     runningState = state;
     if (!connected) {
@@ -192,21 +181,21 @@ function updateRunningState(state) {
         setStatus('Disconnected');
     } else {
         switch (state) {
-            case 0:
+            case 0: // Starting
                 enableControls(false);
                 startBtn.textContent = "Start";
                 break;
-            case 1:
+            case 1: // Running
                 enableControls(true);
                 startBtn.textContent = "Pause";
                 setStatus('Running');
                 break;
-            case 2:
+            case 2: // Paused
                 enableControls(true);
                 startBtn.textContent = "Start";
                 setStatus('Paused');
                 break;
-            case 3:
+            case 3: // Stopped
                 enableControls(true);
                 startBtn.textContent = "Start";
                 setStatus('Stopped');
@@ -218,7 +207,6 @@ function updateRunningState(state) {
         }
     }
 }
-
 function formatDuration(seconds) {
     seconds = Math.floor(seconds);
     const h = Math.floor(seconds / 3600);
@@ -231,7 +219,7 @@ function formatDuration(seconds) {
     return parts.join(' ');
 }
 
-// --- Send Data Logic ---
+// --- Send Data Logic (replaces sendCommand) ---
 let pendingData = null;
 function send_data(packet) {
     pendingData = packet;
@@ -257,6 +245,7 @@ async function connectBluetooth() {
         notifyChar = await server.getPrimaryService(SERVICE_UUID).then(
             service => service.getCharacteristic(NOTIFY_CHAR_UUID)
         ).catch(async () => {
+            // fallback: try to find the service by iterating
             let services = await server.getPrimaryServices();
             for (let s of services) {
                 try {
@@ -286,6 +275,7 @@ async function connectBluetooth() {
         setStatus('Stopped');
         connectBtn.textContent = "Disconnect";
         updateRunningState(3);
+        // No heartbeat loop, just send heartbeat or data on notification
         if (loadingOverlay) loadingOverlay.style.display = 'none';
     } catch (err) {
         console.error("Bluetooth connection error:", err);
@@ -294,6 +284,7 @@ async function connectBluetooth() {
         connected = false;
         connectBtn.textContent = "Connect";
         if (loadingOverlay) loadingOverlay.style.display = 'none';
+        // stopHeartbeatLoop();
     }
 }
 
@@ -317,13 +308,14 @@ function onDisconnected() {
 
 function handleNotification(event) {
     const value = event.target.value;
+    // Logging for debugging
     console.log("Received notification, byteLength:", value.byteLength);
     let hexStr = [];
     for (let i = 0; i < value.byteLength; ++i) {
         hexStr.push(value.getUint8(i).toString(16).padStart(2, "0"));
     }
     console.log("Payload (hex):", hexStr.join(" "));
-
+    // Parse treadmill data from value (see treadmill_data.py for structure)
     if (value.byteLength < 31) {
         treadmillData = {
             speed: "-",
@@ -335,23 +327,24 @@ function handleNotification(event) {
         };
         updateDashboard(treadmillData);
         updateRunningState(3);
+        // If session was active, save it as ended due to disconnect/invalid
         if (sessionActive && sessionStartData) {
             finishSession('Disconnected');
         }
         return;
     }
-
+    // Helper to read unsigned int from bytes
     function u16(offset) {
         return (value.getUint8(offset) << 8) | value.getUint8(offset + 1);
     }
     function u32(offset) {
         return (value.getUint8(offset) << 24) | (value.getUint8(offset + 1) << 16) | (value.getUint8(offset + 2) << 8) | value.getUint8(offset + 3);
     }
-
+    // Parse fields
     const current_speed = u16(3);
     const distance = u32(7);
     const calories = (value.getUint8(18) << 8) | value.getUint8(19);
-    const steps = u32(14); // ignored – always 0 on your model
+    const steps = u32(14);
     const duration = u32(20);
     const flags = value.getUint8(26);
     const unit_mode = (flags & 128) === 128 ? 1 : 0;
@@ -361,31 +354,30 @@ function handleNotification(event) {
     else if (running_state_bits === 8) running_state = 1;
     else if (running_state_bits === 16) running_state = 2;
     else running_state = 3;
-
     const statusArr = ["Starting", "Running", "Paused", "Stopped"];
     const speed_unit = unit_mode === 1 ? "mph" : "kph";
     const distance_unit = unit_mode === 1 ? "mi" : "km";
-
     treadmillData = {
         speed: (current_speed / 1000).toFixed(2) + " " + speed_unit,
         distance: (distance / 1000).toFixed(2) + " " + distance_unit,
         calories: calories + " kcal",
-        steps: '-',  // we override this in updateDashboard
+        steps: steps,
         duration: Math.round(duration / 1000),
         status: statusArr[running_state] || "Unknown",
         _raw: { current_speed, distance, calories, steps, duration, speed_unit }
     };
-
+    // Log parsed fields
     console.log("Parsed treadmill data:", treadmillData);
+    updateDashboard(treadmillData);
     updateRunningState(running_state);
 
-    // --- Session tracking & estimation ---
+    // --- Session tracking logic ---
     if (running_state === 1 && !sessionActive) {
         // Session started
         sessionActive = true;
         sessionStartData = {
             date: Date.now(),
-            estimatedSteps: 0,           // start at 0
+            steps: steps,
             calories: calories,
             distance: distance,
             duration: Math.round(duration / 1000),
@@ -393,94 +385,56 @@ function handleNotification(event) {
             speedCount: 1,
             speedUnit: speed_unit
         };
+        // Save as first session
         const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
         upsertLiveSession({
             date: sessionStartData.date,
             duration: sessionStartData.duration,
-            steps: sessionStartData.estimatedSteps,
+            steps: sessionStartData.steps,
             calories: sessionStartData.calories + ' kcal',
             avgSpeed: avgSpeed,
             speedUnit: sessionStartData.speedUnit || ''
         });
-        // Reset delta tracking
-        lastSentDistanceMeters = distance / 1000;
-        lastSentTime = Date.now();
-        console.log("Session started – estimation & delta tracking initialized");
     } else if (running_state === 1 && sessionActive && sessionStartData) {
         // Update session stats
+        sessionStartData.steps = steps;
         sessionStartData.calories = calories;
         sessionStartData.distance = distance;
         sessionStartData.duration = Math.round(duration / 1000);
         sessionStartData.speedSum += current_speed;
         sessionStartData.speedCount += 1;
-
-        // Estimate steps from total distance in this session
-        const totalDistanceMeters = distance / 1000;
-        sessionStartData.estimatedSteps = Math.round(totalDistanceMeters / STRIDE_LENGTH_METERS);
-
+        // Update first session in treadmill_sessions
         const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
         upsertLiveSession({
             date: sessionStartData.date,
             duration: sessionStartData.duration,
-            steps: sessionStartData.estimatedSteps,
+            steps: sessionStartData.steps,
             calories: sessionStartData.calories + ' kcal',
             avgSpeed: avgSpeed,
             speedUnit: sessionStartData.speedUnit || ''
         });
-
-        // --- Send delta to Tasker ---
-        const now = Date.now();
-        const currentDistanceMeters = distance / 1000;
-
-        if (now - lastSentTime >= DELTA_INTERVAL_MS) {
-            const deltaMeters = currentDistanceMeters - lastSentDistanceMeters;
-            if (deltaMeters > 0) {
-                const estimatedStepsDelta = Math.round(deltaMeters / STRIDE_LENGTH_METERS);
-
-                const payload = {
-                    delta_steps: estimatedStepsDelta,
-                    start_time: lastSentTime,
-                    end_time: now
-                };
-
-                fetch(TASKER_POST_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                })
-                .then(response => {
-                    if (response.ok) {
-                        console.log(`Sent ${estimatedStepsDelta} estimated steps delta to Tasker`);
-                        lastSentDistanceMeters = currentDistanceMeters;
-                        lastSentTime = now;
-                    } else {
-                        console.warn(`Tasker POST failed: ${response.status}`);
-                    }
-                })
-                .catch(err => console.error('POST to Tasker failed:', err));
-            } else {
-                lastSentTime = now;
-            }
-        }
     } else if ((running_state === 3 || running_state === 2) && sessionActive && sessionStartData) {
+        // Session ended (Stopped or Paused)
         finishSession(running_state === 3 ? 'Stopped' : 'Paused');
     }
 
-    // Update dashboard (this will show estimated steps)
-    updateDashboard(treadmillData);
-
-    // Heartbeat / pending data
+    // --- Heartbeat/data send logic, like _notification_handler ---
     if (writeChar) {
         if (pendingData) {
             console.log("Sending pending data packet:", Array.from(pendingData).map(b => b.toString(16).padStart(2, "0")).join(" "));
             writeChar.writeValue(pendingData).then(() => {
                 console.log("Pending data sent.");
                 pendingData = null;
-            }).catch(err => console.error("Failed to send pending data:", err));
+            }).catch(err => {
+                console.error("Failed to send pending data:", err);
+            });
         } else {
+            // Heartbeat packet: 6a05fdf843
             const heartbeat = new Uint8Array([0x6a, 0x05, 0xfd, 0xf8, 0x43]);
             console.log("Sending heartbeat packet:", Array.from(heartbeat).map(b => b.toString(16).padStart(2, "0")).join(" "));
-            writeChar.writeValue(heartbeat).catch(err => console.error("Failed to send heartbeat:", err));
+            writeChar.writeValue(heartbeat).catch(err => {
+                console.error("Failed to send heartbeat:", err);
+            });
         }
     }
 }
@@ -496,28 +450,41 @@ async function sendCommand(packet) {
     }
 }
 
+// --- Command Packet Generators (see treadmill_controller.py) ---
+/**
+ * Constructs a treadmill command packet.
+ * @param {string} type - Command type: "start", "pause", "stop", or "set_speed".
+ * @param {number} [speed=1000] - Target speed in treadmill units (integer, 1000 = 1.00 kph, range: 1000 to 6000).
+ * @returns {Uint8Array} The command packet.
+ */
 function makePacket(type, speed = 1000) {
+    // type: "start", "pause", "stop", "set_speed"
+    // Implements the protocol from treadmill_controller.py
     let arr = new Uint8Array(23);
-    arr[0] = 0x6A;
-    arr[1] = 0x17;
+    arr[0] = 0x6A; // START_BYTE
+    arr[1] = 0x17; // LENGTH
+    // arr[2-5] = 0 (reserved)
     arr[6] = (speed >> 8) & 0xFF;
     arr[7] = speed & 0xFF;
-    arr[8] = type === "set_speed" ? 5 : 1;
-    arr[9] = 0;
-    arr[10] = 80;
-    arr[11] = 0;
+    arr[8] = type === "set_speed" ? 5 : 1; // magical_i11: 5 for set_speed, 1 for others
+    arr[9] = 0; // incline
+    arr[10] = 80; // weight (default)
+    arr[11] = 0; // reserved
+    // Command byte (kph): 4=start/set, 2=pause, 0=stop
     let cmd = type === "pause" ? 2 : type === "stop" ? 0 : 4;
-    arr[12] = cmd & 0xF7;
+    arr[12] = cmd & 0xF7; // kph mode (bit 3 = 0)
+    // User ID (8 bytes, default 58965456623)
     let userId = 58965456623n;
     for (let i = 0; i < 8; ++i) {
         arr[13 + i] = Number((userId >> BigInt(56 - i * 8)) & 0xFFn);
     }
+    // Checksum: XOR of bytes 1 to 20
     let checksum = 0;
     for (let i = 1; i <= 20; ++i) {
         checksum ^= arr[i];
     }
     arr[21] = checksum;
-    arr[22] = 0x43;
+    arr[22] = 0x43; // END_BYTE
     return arr;
 }
 
@@ -529,9 +496,10 @@ connectBtn.addEventListener('click', () => {
 
 startBtn.addEventListener('click', async () => {
     if (!connected) return;
-    if (runningState === 1) {
+    if (runningState === 1) { // Running -> Pause
         send_data(makePacket("pause"));
-    } else {
+    } else { // Start
+        // Show countdown overlay (visual only, do not delay command)
         if (countdownOverlay && countdownNumber) {
             countdownOverlay.style.display = 'flex';
             countdownOverlay.style.opacity = '1';
@@ -539,6 +507,7 @@ startBtn.addEventListener('click', async () => {
             countdownNumber.textContent = count;
             countdownNumber.style.opacity = '1';
             countdownNumber.style.transform = 'scale(1)';
+            // Animate countdown in background
             (async () => {
                 for (let i = 0; i < 3; i++) {
                     await new Promise(res => setTimeout(res, 700));
@@ -554,9 +523,9 @@ startBtn.addEventListener('click', async () => {
                 }
                 await new Promise(res => setTimeout(res, 400));
                 countdownOverlay.style.opacity = '0';
-                await new Promise(res => setTimeout(res, 500));
+                await new Promise(res => setTimeout(res, 500)); // Wait for fade-out
                 countdownOverlay.style.display = 'none';
-                countdownOverlay.style.opacity = '1';
+                countdownOverlay.style.opacity = '1'; // Reset for next time
             })();
         }
         send_data(makePacket("start", curTargetSpeed));
@@ -619,29 +588,24 @@ function upsertLiveSession(session) {
 }
 
 function finishSession(reason) {
-    if (sessionActive && sessionStartData && lastSentTime > 0) {
-        console.log(`Session finished (${reason}) – last delta sent at ${new Date(lastSentTime).toLocaleTimeString()}`);
-    }
-
     sessionActive = false;
     sessionStartData = null;
-    lastSentDistanceMeters = 0;
-    lastSentTime = 0;
-
-    // Refresh dashboard to show '-' for steps
-    updateDashboard(treadmillData);
-
+    // No need to do anything else, as the session is already up-to-date in treadmill_sessions
+    
+    // NEW: Auto-download the full history as JSON
     autoSaveSessionsToFile();
-    showToast(`Session ${reason}. History auto-saved.`);
+    
+    showToast(`Session ${status}. History auto-saved.`);
 }
 
+// On page load, check for an unfinished session and restore it if present
 const restored = loadCurrentSession();
 if (restored && !sessionActive) {
     sessionActive = true;
     sessionStartData = restored;
 }
 
-// --- Import/Export ---
+// --- Import/Export History ---
 if (exportHistoryBtn) {
     exportHistoryBtn.addEventListener('click', () => {
         const sessions = loadSessions();
@@ -691,12 +655,41 @@ function showToast(message, timeout = 4000) {
     if (snackbar && snackbar.MaterialSnackbar) {
         snackbar.MaterialSnackbar.showSnackbar({ message, timeout });
     } else if (snackbar) {
+        // fallback for late upgrade
         snackbar.querySelector('.mdl-snackbar__text').textContent = message;
         snackbar.classList.add('mdl-snackbar--active');
         setTimeout(() => snackbar.classList.remove('mdl-snackbar--active'), timeout);
     } else {
-        alert(message);
+        alert(message); // fallback
     }
 }
-
+// Start auto-save every 5 minutes (300000 ms)
+// You can change to 10 minutes: 600000, etc.
 setInterval(autoSaveSessionsToFile, 5 * 60 * 1000);
+
+// Optional: also save immediately when the page loads (useful for testing)
+//setTimeout(autoSaveSessionsToFile, 10000); // after 10 seconds
+// Manual upload button
+/*-const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
+if (uploadToTaskerBtn) {
+    uploadToTaskerBtn.addEventListener('click', async () => {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'Upload to Google Fit',
+                    text: 'pitpat_upload_trigger'
+                });
+                showToast('Select Tasker from share menu');
+            } catch (err) {
+                showToast('Share cancelled');
+            }
+        } else {
+            showToast('Share API not available');
+        }
+    });
+}
+>*/
+uploadToTaskerBtn.onclick = () => {
+  window.location.href =
+    'tasker://assistantactions?task=PitPat_Upload_Steps';
+};
