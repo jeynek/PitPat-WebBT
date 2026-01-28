@@ -664,7 +664,7 @@ function finishSession(reason) {
     // No need to do anything else, as the session is already up-to-date in treadmill_sessions
     
     // NEW: Auto-download the full history as JSON
-    autoSaveSessionsToFile();
+    //autoSaveSessionsToFile();
     
     showToast(`Session ${reason}. History auto-saved.`);
 }
@@ -736,7 +736,7 @@ function showToast(message, timeout = 4000) {
 }
 // Start auto-save every 5 minutes (300000 ms)
 // You can change to 10 minutes: 600000, etc.
-setInterval(autoSaveSessionsToFile, 5 * 60 * 1000);
+//setInterval(autoSaveSessionsToFile, 5 * 60 * 1000);
 
 // Optional: also save immediately when the page loads (useful for testing)
 //setTimeout(autoSaveSessionsToFile, 10000); // after 10 seconds
