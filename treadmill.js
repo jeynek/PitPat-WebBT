@@ -8,7 +8,7 @@ const WRITE_CHAR_UUID = "0000fba1-0000-1000-8000-00805f9b34fb";
 // --- Treadmill to Tasker integration ---
 const TASKER_POST_URL = 'http://127.0.0.1:1821/';
 const DELTA_INTERVAL_MS = 5 * 60 * 1000;          // 5 minutes
-const STRIDE_LENGTH_METERS = 0.75;                // average stride – change if needed (0.65–0.85 typical)
+const STRIDE_LENGTH_METERS = 0.75;                // average stride – change if needed
 
 // --- UI Elements ---
 const connectBtn = document.getElementById('connectBtn');
@@ -49,7 +49,7 @@ function loadSessions() {
 function saveSessions(sessions) {
     localStorage.setItem('treadmill_sessions', JSON.stringify(sessions));
 }
-// Auto-save sessions to a downloadable JSON file every X minutes
+
 function autoSaveSessionsToFile() {
     const sessions = loadSessions();
     if (sessions.length === 0) return;
@@ -78,18 +78,21 @@ function autoSaveSessionsToFile() {
     console.log('Auto-saved sessions JSON');
     showToast('Auto-saved session history');
 }
+
 function addSession(session) {
     const sessions = loadSessions();
     sessions.unshift(session);
     saveSessions(sessions);
     renderSessionTable();
 }
+
 function deleteSession(idx) {
     const sessions = loadSessions();
     sessions.splice(idx, 1);
     saveSessions(sessions);
     renderSessionTable();
 }
+
 function renderSessionTable() {
     const sessions = loadSessions();
     historyTableBody.innerHTML = '';
@@ -125,10 +128,10 @@ let notifyChar = null;
 let writeChar = null;
 let treadmillData = {};
 let connected = false;
-let runningState = 3; // 0: Starting, 1: Running, 2: Paused, 3: Stopped
+let runningState = 3;
 let curTargetSpeed = 1000;
 
-// Treadmill → Tasker delta tracking
+// Delta tracking for Tasker
 let lastSentDistanceMeters = 0;
 let lastSentTime = 0;
 
@@ -136,36 +139,34 @@ let lastSentTime = 0;
 
 function setStatus(msg) {
     let displayMsg = msg;
-    if (msg.toLowerCase().includes('connecting')) {
-        displayMsg = 'Connecting';
-    } else if (msg.toLowerCase().includes('not connected') || msg.toLowerCase().includes('disconnect')) {
-        displayMsg = 'Disconnected';
-    } else if (msg.toLowerCase().includes('paused')) {
-        displayMsg = 'Paused';
-    } else if (msg.toLowerCase().includes('running')) {
-        displayMsg = 'Running';
-    } else if (msg.toLowerCase().includes('stopped')) {
-        displayMsg = 'Stopped';
-    }
+    if (msg.toLowerCase().includes('connecting')) displayMsg = 'Connecting';
+    else if (msg.toLowerCase().includes('not connected') || msg.toLowerCase().includes('disconnect')) displayMsg = 'Disconnected';
+    else if (msg.toLowerCase().includes('paused')) displayMsg = 'Paused';
+    else if (msg.toLowerCase().includes('running')) displayMsg = 'Running';
+    else if (msg.toLowerCase().includes('stopped')) displayMsg = 'Stopped';
+
     if (statusChip) {
         statusChip.querySelector('.mdl-chip__text').textContent = displayMsg;
         statusChip.classList.remove('chip-connected', 'chip-connecting', 'chip-disconnected', 'chip-paused');
-        if (displayMsg === 'Running') {
-            statusChip.classList.add('chip-connected');
-        } else if (displayMsg === 'Connecting') {
-            statusChip.classList.add('chip-connecting');
-        } else if (displayMsg === 'Paused') {
-            statusChip.classList.add('chip-paused');
-        } else {
-            statusChip.classList.add('chip-disconnected');
-        }
+        if (displayMsg === 'Running') statusChip.classList.add('chip-connected');
+        else if (displayMsg === 'Connecting') statusChip.classList.add('chip-connecting');
+        else if (displayMsg === 'Paused') statusChip.classList.add('chip-paused');
+        else statusChip.classList.add('chip-disconnected');
     }
 }
+
 function updateDashboard(data) {
     speedDiv.textContent = data.speed || '-';
     distanceDiv.textContent = data.distance || '-';
     caloriesDiv.textContent = data.calories || '-';
-    stepsDiv.textContent = (data.steps !== undefined && data.steps !== null) ? data.steps : '-';
+
+    // Show estimated steps instead of real (always 0) steps
+    if (sessionActive && sessionStartData && sessionStartData.estimatedSteps !== undefined) {
+        stepsDiv.textContent = sessionStartData.estimatedSteps.toLocaleString('pl-PL');
+    } else {
+        stepsDiv.textContent = '-';
+    }
+
     if (data.duration && typeof data.duration === 'number') {
         durationDiv.textContent = formatDuration(data.duration);
     } else if (typeof data.duration === 'string' && !isNaN(parseFloat(data.duration))) {
@@ -174,6 +175,7 @@ function updateDashboard(data) {
         durationDiv.textContent = data.duration || '-';
     }
 }
+
 function enableControls(enable) {
     startBtn.disabled = !enable;
     stopBtn.disabled = !enable;
@@ -181,6 +183,7 @@ function enableControls(enable) {
     speedDownBtn.disabled = !enable;
     speedSlider.disabled = !enable;
 }
+
 function updateRunningState(state) {
     runningState = state;
     if (!connected) {
@@ -189,21 +192,21 @@ function updateRunningState(state) {
         setStatus('Disconnected');
     } else {
         switch (state) {
-            case 0: // Starting
+            case 0:
                 enableControls(false);
                 startBtn.textContent = "Start";
                 break;
-            case 1: // Running
+            case 1:
                 enableControls(true);
                 startBtn.textContent = "Pause";
                 setStatus('Running');
                 break;
-            case 2: // Paused
+            case 2:
                 enableControls(true);
                 startBtn.textContent = "Start";
                 setStatus('Paused');
                 break;
-            case 3: // Stopped
+            case 3:
                 enableControls(true);
                 startBtn.textContent = "Start";
                 setStatus('Stopped');
@@ -215,6 +218,7 @@ function updateRunningState(state) {
         }
     }
 }
+
 function formatDuration(seconds) {
     seconds = Math.floor(seconds);
     const h = Math.floor(seconds / 3600);
@@ -345,9 +349,9 @@ function handleNotification(event) {
     }
 
     const current_speed = u16(3);
-    const distance = u32(7);                    // raw value (millimeters or similar)
+    const distance = u32(7);
     const calories = (value.getUint8(18) << 8) | value.getUint8(19);
-    const steps = u32(14);                      // will be 0 on your model
+    const steps = u32(14); // ignored – always 0 on your model
     const duration = u32(20);
     const flags = value.getUint8(26);
     const unit_mode = (flags & 128) === 128 ? 1 : 0;
@@ -366,22 +370,22 @@ function handleNotification(event) {
         speed: (current_speed / 1000).toFixed(2) + " " + speed_unit,
         distance: (distance / 1000).toFixed(2) + " " + distance_unit,
         calories: calories + " kcal",
-        steps: steps,
+        steps: '-',  // we override this in updateDashboard
         duration: Math.round(duration / 1000),
         status: statusArr[running_state] || "Unknown",
         _raw: { current_speed, distance, calories, steps, duration, speed_unit }
     };
 
     console.log("Parsed treadmill data:", treadmillData);
-    updateDashboard(treadmillData);
     updateRunningState(running_state);
 
-    // --- Session tracking ---
+    // --- Session tracking & estimation ---
     if (running_state === 1 && !sessionActive) {
+        // Session started
         sessionActive = true;
         sessionStartData = {
             date: Date.now(),
-            steps: steps,
+            estimatedSteps: 0,           // start at 0
             calories: calories,
             distance: distance,
             duration: Math.round(duration / 1000),
@@ -393,43 +397,48 @@ function handleNotification(event) {
         upsertLiveSession({
             date: sessionStartData.date,
             duration: sessionStartData.duration,
-            steps: sessionStartData.steps,
+            steps: sessionStartData.estimatedSteps,
             calories: sessionStartData.calories + ' kcal',
             avgSpeed: avgSpeed,
             speedUnit: sessionStartData.speedUnit || ''
         });
-        // Reset delta tracking on new session start
+        // Reset delta tracking
         lastSentDistanceMeters = distance / 1000;
         lastSentTime = Date.now();
-        console.log("Session started – delta tracking initialized");
+        console.log("Session started – estimation & delta tracking initialized");
     } else if (running_state === 1 && sessionActive && sessionStartData) {
-        sessionStartData.steps = steps;
+        // Update session stats
         sessionStartData.calories = calories;
         sessionStartData.distance = distance;
         sessionStartData.duration = Math.round(duration / 1000);
         sessionStartData.speedSum += current_speed;
         sessionStartData.speedCount += 1;
+
+        // Estimate steps from total distance in this session
+        const totalDistanceMeters = distance / 1000;
+        sessionStartData.estimatedSteps = Math.round(totalDistanceMeters / STRIDE_LENGTH_METERS);
+
         const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
         upsertLiveSession({
             date: sessionStartData.date,
             duration: sessionStartData.duration,
-            steps: sessionStartData.steps,
+            steps: sessionStartData.estimatedSteps,
             calories: sessionStartData.calories + ' kcal',
             avgSpeed: avgSpeed,
             speedUnit: sessionStartData.speedUnit || ''
         });
 
-        // --- Send estimated steps delta to Tasker ---
+        // --- Send delta to Tasker ---
         const now = Date.now();
-        const currentDistanceMeters = distance / 1000;  // raw distance / 1000 → meters
+        const currentDistanceMeters = distance / 1000;
 
         if (now - lastSentTime >= DELTA_INTERVAL_MS) {
             const deltaMeters = currentDistanceMeters - lastSentDistanceMeters;
             if (deltaMeters > 0) {
-                const estimatedSteps = Math.round(deltaMeters / STRIDE_LENGTH_METERS);
+                const estimatedStepsDelta = Math.round(deltaMeters / STRIDE_LENGTH_METERS);
 
                 const payload = {
-                    delta_steps: estimatedSteps,
+                    delta_steps: estimatedStepsDelta,
                     start_time: lastSentTime,
                     end_time: now
                 };
@@ -441,40 +450,37 @@ function handleNotification(event) {
                 })
                 .then(response => {
                     if (response.ok) {
-                        console.log(`Sent estimated ${estimatedSteps} steps to Tasker (distance delta: ${deltaMeters.toFixed(2)} m)`);
+                        console.log(`Sent ${estimatedStepsDelta} estimated steps delta to Tasker`);
                         lastSentDistanceMeters = currentDistanceMeters;
                         lastSentTime = now;
                     } else {
                         console.warn(`Tasker POST failed: ${response.status}`);
                     }
                 })
-                .catch(err => {
-                    console.error('POST to Tasker failed:', err);
-                });
+                .catch(err => console.error('POST to Tasker failed:', err));
             } else {
-                lastSentTime = now;  // no progress, but update time
+                lastSentTime = now;
             }
         }
     } else if ((running_state === 3 || running_state === 2) && sessionActive && sessionStartData) {
         finishSession(running_state === 3 ? 'Stopped' : 'Paused');
     }
 
-    // --- Heartbeat / pending data ---
+    // Update dashboard (this will show estimated steps)
+    updateDashboard(treadmillData);
+
+    // Heartbeat / pending data
     if (writeChar) {
         if (pendingData) {
             console.log("Sending pending data packet:", Array.from(pendingData).map(b => b.toString(16).padStart(2, "0")).join(" "));
             writeChar.writeValue(pendingData).then(() => {
                 console.log("Pending data sent.");
                 pendingData = null;
-            }).catch(err => {
-                console.error("Failed to send pending data:", err);
-            });
+            }).catch(err => console.error("Failed to send pending data:", err));
         } else {
             const heartbeat = new Uint8Array([0x6a, 0x05, 0xfd, 0xf8, 0x43]);
             console.log("Sending heartbeat packet:", Array.from(heartbeat).map(b => b.toString(16).padStart(2, "0")).join(" "));
-            writeChar.writeValue(heartbeat).catch(err => {
-                console.error("Failed to send heartbeat:", err);
-            });
+            writeChar.writeValue(heartbeat).catch(err => console.error("Failed to send heartbeat:", err));
         }
     }
 }
@@ -613,11 +619,7 @@ function upsertLiveSession(session) {
 }
 
 function finishSession(reason) {
-    // Final delta send before ending session
     if (sessionActive && sessionStartData && lastSentTime > 0) {
-        const now = Date.now();
-        // We don't have the very last distance here → skip final send or use last known
-        // (since handleNotification already sent periodically, usually fine)
         console.log(`Session finished (${reason}) – last delta sent at ${new Date(lastSentTime).toLocaleTimeString()}`);
     }
 
@@ -626,11 +628,13 @@ function finishSession(reason) {
     lastSentDistanceMeters = 0;
     lastSentTime = 0;
 
+    // Refresh dashboard to show '-' for steps
+    updateDashboard(treadmillData);
+
     autoSaveSessionsToFile();
     showToast(`Session ${reason}. History auto-saved.`);
 }
 
-// Restore unfinished session
 const restored = loadCurrentSession();
 if (restored && !sessionActive) {
     sessionActive = true;
@@ -695,5 +699,4 @@ function showToast(message, timeout = 4000) {
     }
 }
 
-// Auto-save every 5 minutes
 setInterval(autoSaveSessionsToFile, 5 * 60 * 1000);
