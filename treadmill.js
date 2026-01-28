@@ -501,7 +501,7 @@ function makePacket(type, speed = 1000) {
 async function emptyPost() {
     try {
         showToast('Pinging 1821...');
-        await fetch('http://127.0.0.1:1821/', { method: 'POST' });
+        await fetch('http://127.0.0.1:1821/', { method: 'POST', targetAddressSpace: "local" });
         showToast('Done');
     } catch (err) {
         showToast('Failed: ' + err.message, 5000);
@@ -512,7 +512,7 @@ async function tryPing() {
         await fetch('http://localhost:1821', {
             method: 'POST',
             mode: 'no-cors',
-            targetAddressSpace: 'loopback'  // ← tells Chrome this is intentional → more likely to prompt
+            targetAddressSpace: "local"  // ← tells Chrome this is intentional → more likely to prompt
         });
         showToast('Ping sent (prompt may have appeared)');
     } catch (err) {
