@@ -28,6 +28,10 @@ const importHistoryBtn = document.getElementById('importHistoryBtn');
 const exportHistoryBtn = document.getElementById('exportHistoryBtn');
 const importHistoryInput = document.getElementById('importHistoryInput');
 const snackbar = document.getElementById('snackbar');
+const uploadToServerBtn = document.getElementById('uploadToServerBtn');
+
+// --- Configuration for HTTP POST ---
+const SERVER_URL = 'http://127.0.0.1:1821/';
 
 // --- Session History Logic ---
 let sessionActive = false;
@@ -488,6 +492,66 @@ function makePacket(type, speed = 1000) {
     return arr;
 }
 
+// --- HTTP POST Function ---
+/**
+ * Sends session data to a server via HTTP POST
+ * @param {Object} sessionData - The session data to upload
+ * @returns {Promise<Object>} Response from the server
+ */
+async function uploadSessionToServer(sessionData) {
+    try {
+        showToast('Uploading session to server...');
+        
+        const response = await fetch(SERVER_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(sessionData)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('Upload successful:', result);
+        showToast('Session uploaded successfully!');
+        return result;
+    } catch (error) {
+        console.error('Upload failed:', error);
+        showToast('Upload failed: ' + error.message);
+        throw error;
+    }
+}
+
+/**
+ * Upload all sessions to server
+ */
+async function uploadAllSessionsToServer() {
+    const sessions = loadSessions();
+    
+    if (sessions.length === 0) {
+        showToast('No sessions to upload');
+        return;
+    }
+
+    try {
+        const payload = {
+            sessions: sessions,
+            uploadDate: new Date().toISOString(),
+            deviceInfo: {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform
+            }
+        };
+
+        await uploadSessionToServer(payload);
+    } catch (error) {
+        // Error already handled in uploadSessionToServer
+    }
+}
+
 // --- UI Event Handlers ---
 connectBtn.addEventListener('click', () => {
     if (!connected) connectBluetooth();
@@ -558,6 +622,13 @@ speedSlider.addEventListener('change', () => {
     send_data(makePacket("set_speed", curTargetSpeed));
 });
 
+// --- Upload to Server Button Handler ---
+if (uploadToServerBtn) {
+    uploadToServerBtn.addEventListener('click', async () => {
+        await uploadAllSessionsToServer();
+    });
+}
+
 // --- Initialize ---
 updateDashboard({});
 updateRunningState(3);
@@ -595,7 +666,7 @@ function finishSession(reason) {
     // NEW: Auto-download the full history as JSON
     autoSaveSessionsToFile();
     
-    showToast(`Session ${status}. History auto-saved.`);
+    showToast(`Session ${reason}. History auto-saved.`);
 }
 
 // On page load, check for an unfinished session and restore it if present
@@ -689,7 +760,9 @@ if (uploadToTaskerBtn) {
     });
 }
 >*/
-uploadToTaskerBtn.onclick = () => {
-  window.location.href =
-    'tasker://assistantactions?task=PitPat_Upload_Steps';
-};
+const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
+if (uploadToTaskerBtn) {
+    uploadToTaskerBtn.onclick = () => {
+        window.location.href = 'tasker://assistantactions?task=PitPat_Upload_Steps';
+    };
+}
