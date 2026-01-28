@@ -498,33 +498,8 @@ function makePacket(type, speed = 1000) {
  * @param {Object} sessionData - The session data to upload
  * @returns {Promise<Object>} Response from the server
  */
-async function emptyPost() {
-    try {
-        showToast('Pinging 1821...');
-        await fetch('http://127.0.0.1:1821/', { method: 'POST', targetAddressSpace: "local" });
-        showToast('Done');
-    } catch (err) {
-        showToast('Failed: ' + err.message, 5000);
-    }
-}
-async function tryPing() {
-    try {
-        await fetch('http://localhost:1821', {
-            method: 'POST',
-            mode: 'no-cors',
-            targetAddressSpace: "local"  // ← tells Chrome this is intentional → more likely to prompt
-        });
-        showToast('Ping sent (prompt may have appeared)');
-    } catch (err) {
-        console.error('Ping failed:', err);
-        showToast('Local access blocked – check for permission prompt');
-    }
-}
 async function uploadSessionToServer(sessionData) {
-    tryPing();
-    //emptyPost();
-    
-   /* try {
+    try {
         showToast('Uploading session to server...');
         
         const response = await fetch(SERVER_URL, {
@@ -544,9 +519,9 @@ async function uploadSessionToServer(sessionData) {
         showToast('Session uploaded successfully!');
         return result;
     } catch (error) {
-        showToast('Upload not done: ' + error.message, 5000);
+        showToast('Upload failed: ' + error.message, 5000);
         throw error;
-    }*/
+    }
 }
 /**
  * Upload all sessions to server
