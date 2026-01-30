@@ -395,6 +395,7 @@ function handleNotification(event) {
             date: sessionStartData.date,
             duration: sessionStartData.duration,
             steps: sessionStartData.steps,
+            distance: sessionStartData.distance,
             calories: sessionStartData.calories + ' kcal',
             avgSpeed: avgSpeed,
             speedUnit: sessionStartData.speedUnit || ''
@@ -413,6 +414,7 @@ function handleNotification(event) {
             date: sessionStartData.date,
             duration: sessionStartData.duration,
             steps: sessionStartData.steps,
+            distance: sessionStartData.distance,
             calories: sessionStartData.calories + ' kcal',
             avgSpeed: avgSpeed,
             speedUnit: sessionStartData.speedUnit || ''
