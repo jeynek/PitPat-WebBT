@@ -11,4 +11,4 @@ A web-based dashboard to control and monitor a PitPat treadmill via Bluetooth. T
 [https://keirany.github.io/PitPat-WebBT/](https://keirany.github.io/PitPat-WebBT/)
 
 
-# Forked to add automatic exports every 5 minutes with date and time in json filename
+# Forked to enable PWA, better resuming and sending the data to Health Connect using Tasker.
