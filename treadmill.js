@@ -92,8 +92,10 @@ function deleteSession(idx) {
 }
 function renderSessionTable() {
     const sessions = loadSessions();
+    console.log('Rendering sessions:', sessions);
     historyTableBody.innerHTML = '';
     sessions.forEach((s, i) => {
+        console.log(`Session ${i} date:`, s.date, 'type:', typeof s.date);
         let avgSpeedDisplay = '-';
         if (typeof s.avgSpeed === 'number' && !isNaN(s.avgSpeed)) {
             avgSpeedDisplay = s.avgSpeed.toFixed(2) + ' ' + (s.speedUnit || '');
@@ -102,7 +104,14 @@ function renderSessionTable() {
         }
         let dateStr = '-';
         if (typeof s.date === 'number' || typeof s.date === 'string') {
-            dateStr = dateFns.formatRelative(new Date(s.date), new Date());
+            try {
+                dateStr = dateFns.formatRelative(new Date(s.date), new Date());
+                console.log(`Formatted date for session ${i}:`, dateStr);
+            } catch (e) {
+                console.error('Error formatting date:', e, 's.date =', s.date);
+            }
+        } else {
+            console.log(`Session ${i} has invalid date:`, s.date);
         }
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -305,9 +314,8 @@ function onDisconnected() {
     setStatus('Disconnected');
     connectBtn.textContent = "Connect";
     updateRunningState(3);
-    if (sessionActive && sessionStartData) {
-        finishSession('Disconnected');
-    }
+    // Don't finish the session on disconnect - it can be resumed
+    showToast('Disconnected - session will resume on reconnect');
 }
 
 function handleNotification(event) {
@@ -331,10 +339,7 @@ function handleNotification(event) {
         };
         updateDashboard(treadmillData);
         updateRunningState(3);
-        // If session was active, save it as ended due to disconnect/invalid
-        if (sessionActive && sessionStartData) {
-            finishSession('Disconnected');
-        }
+        // Don't finish session on invalid data - just skip this notification
         return;
     }
     // Helper to read unsigned int from bytes
@@ -375,53 +380,293 @@ function handleNotification(event) {
     updateDashboard(treadmillData);
     updateRunningState(running_state);
 
-    // --- Session tracking logic ---
+    // --- Session tracking logic with laps and segments ---
+    const now = Date.now();
+    const durationSec = Math.round(duration / 1000);
+    
+    // Check if we should resume an existing session
+    // Don't try to resume if we just finished a session (sessionActive is false but we just set it to false)
+    if (!sessionActive && durationSec > 0) {
+        // There's an ongoing session on the treadmill, try to resume from localStorage
+        const sessions = loadSessions();
+        if (sessions.length > 0) {
+            const lastSession = sessions[0];
+            // Check if the last session is unfinished (has matching characteristics)
+            // We consider it the same session if:
+            // 1. It was updated recently (within 1 hour)
+            // 2. The treadmill duration is >= the stored duration (session continued)
+            // 3. The last session doesn't have a very recent lastUpdated (to prevent resume right after stop)
+            const timeSinceLastUpdate = now - (lastSession.lastUpdated || lastSession.date);
+            const isRecentSession = timeSinceLastUpdate < 3600000; // within 1 hour
+            const notJustFinished = timeSinceLastUpdate > 5000; // at least 5 seconds since last update
+            const isSameSession = durationSec >= (lastSession.duration || 0);
+            
+            if (isRecentSession && notJustFinished && isSameSession) {
+                // Resume the session
+                sessionActive = true;
+                sessionStartData = {
+                    date: lastSession.date,
+                    steps: steps,
+                    calories: calories,
+                    distance: distance,
+                    duration: durationSec,
+                    speedSum: lastSession.speedSum || (lastSession.avgSpeed * (lastSession.speedCount || 1) * 1000),
+                    speedCount: lastSession.speedCount || 1,
+                    speedUnit: speed_unit,
+                    laps: lastSession.laps || [],
+                    segments: lastSession.segments || [],
+                    samples: lastSession.samples || [],
+                    currentLapStart: now,
+                    currentLapStartDistance: distance,
+                    currentSegmentStart: now,
+                    lastState: running_state,
+                    lastRecordedSpeed: current_speed
+                };
+                
+                // If we're running, ensure we have an active segment
+                if (running_state === 1) {
+                    // Check if last segment needs to be closed
+                    if (sessionStartData.segments.length > 0) {
+                        const lastSegment = sessionStartData.segments[sessionStartData.segments.length - 1];
+                        if (lastSegment.endTime === null && lastSegment.segmentType === 39) {
+                            // Close pause segment
+                            lastSegment.endTime = now;
+                        }
+                    }
+                    // Add new active segment if needed
+                    if (sessionStartData.segments.length === 0 || 
+                        sessionStartData.segments[sessionStartData.segments.length - 1].segmentType !== 47) {
+                        sessionStartData.segments.push({
+                            startTime: now,
+                            endTime: null,
+                            segmentType: 47 // active
+                        });
+                    }
+                }
+                
+                showToast('Resumed ongoing session');
+                console.log('Resumed session from localStorage');
+            }
+        }
+    }
+    
     if (running_state === 1 && !sessionActive) {
         // Session started
         sessionActive = true;
         sessionStartData = {
-            date: Date.now(),
+            date: now,
             steps: steps,
             calories: calories,
             distance: distance,
-            duration: Math.round(duration / 1000),
+            duration: durationSec,
             speedSum: current_speed,
             speedCount: 1,
-            speedUnit: speed_unit
+            speedUnit: speed_unit,
+            laps: [],
+            segments: [],
+            samples: [],
+            currentLapStart: now,
+            currentLapStartDistance: distance,
+            currentSegmentStart: now,
+            lastState: 1, // 1 = running
+            lastRecordedSpeed: current_speed
         };
-        // Save as first session
+        
+        // Record initial speed sample
+        sessionStartData.samples.push({
+            time: now,
+            speed: {
+                value: current_speed / 1000,
+                type: speed_unit === 'mph' ? 'MILES_PER_HOUR' : 'KILOMETERS_PER_HOUR'
+            }
+        });
+        
+        // Start first segment (active)
+        sessionStartData.segments.push({
+            startTime: now,
+            endTime: null,
+            segmentType: 47 // active
+        });
+        
+        // Save initial session
         const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
         upsertLiveSession({
             date: sessionStartData.date,
             duration: sessionStartData.duration,
             steps: sessionStartData.steps,
             distance: sessionStartData.distance,
-            calories: sessionStartData.calories + ' kcal',
+            calories: calories + ' kcal',
             avgSpeed: avgSpeed,
-            speedUnit: sessionStartData.speedUnit || ''
+            speedUnit: sessionStartData.speedUnit || '',
+            laps: sessionStartData.laps,
+            segments: sessionStartData.segments,
+            samples: sessionStartData.samples,
+            speedSum: sessionStartData.speedSum,
+            speedCount: sessionStartData.speedCount,
+            lastUpdated: now
         });
+        
     } else if (running_state === 1 && sessionActive && sessionStartData) {
-        // Update session stats
+        // Continue running - update session stats
         sessionStartData.steps = steps;
         sessionStartData.calories = calories;
         sessionStartData.distance = distance;
-        sessionStartData.duration = Math.round(duration / 1000);
+        sessionStartData.duration = durationSec;
         sessionStartData.speedSum += current_speed;
         sessionStartData.speedCount += 1;
-        // Update first session in treadmill_sessions
+        
+        // Check if speed changed and record sample
+        if (current_speed !== sessionStartData.lastRecordedSpeed) {
+            sessionStartData.samples.push({
+                time: now,
+                speed: {
+                    value: current_speed / 1000,
+                    type: speed_unit === 'mph' ? 'MILES_PER_HOUR' : 'KILOMETERS_PER_HOUR'
+                }
+            });
+            sessionStartData.lastRecordedSpeed = current_speed;
+        }
+        
+        // If we just resumed from pause, close pause segment and start active segment
+        if (sessionStartData.lastState === 2) {
+            // Close pause segment
+            if (sessionStartData.segments.length > 0) {
+                const lastSegment = sessionStartData.segments[sessionStartData.segments.length - 1];
+                if (lastSegment.endTime === null) {
+                    lastSegment.endTime = now;
+                }
+            }
+            
+            // Start new active segment
+            sessionStartData.segments.push({
+                startTime: now,
+                endTime: null,
+                segmentType: 47 // active
+            });
+            
+            // Start new lap
+            sessionStartData.currentLapStart = now;
+            sessionStartData.currentLapStartDistance = distance;
+        }
+        
+        sessionStartData.lastState = 1;
+        
+        // Update live session
         const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
         upsertLiveSession({
             date: sessionStartData.date,
             duration: sessionStartData.duration,
             steps: sessionStartData.steps,
             distance: sessionStartData.distance,
-            calories: sessionStartData.calories + ' kcal',
+            calories: calories + ' kcal',
             avgSpeed: avgSpeed,
-            speedUnit: sessionStartData.speedUnit || ''
+            speedUnit: sessionStartData.speedUnit || '',
+            laps: sessionStartData.laps,
+            segments: sessionStartData.segments,
+            samples: sessionStartData.samples,
+            speedSum: sessionStartData.speedSum,
+            speedCount: sessionStartData.speedCount,
+            lastUpdated: now
         });
-    } else if ((running_state === 3 || running_state === 2) && sessionActive && sessionStartData) {
-        // Session ended (Stopped or Paused)
-        finishSession(running_state === 3 ? 'Stopped' : 'Paused');
+        
+    } else if (running_state === 2 && sessionActive && sessionStartData) {
+        // Paused - close current lap and active segment, start pause segment
+        if (sessionStartData.lastState === 1) {
+            // Close current lap
+            const lapDistance = distance - sessionStartData.currentLapStartDistance;
+            sessionStartData.laps.push({
+                startTime: sessionStartData.currentLapStart,
+                endTime: now,
+                length: {
+                    value: lapDistance, // keep in meters (treadmill reports in meters)
+                    type: "METERS"
+                }
+            });
+            
+            // Close active segment
+            if (sessionStartData.segments.length > 0) {
+                const lastSegment = sessionStartData.segments[sessionStartData.segments.length - 1];
+                if (lastSegment.endTime === null) {
+                    lastSegment.endTime = now;
+                }
+            }
+            
+            // Start pause segment
+            sessionStartData.segments.push({
+                startTime: now,
+                endTime: null,
+                segmentType: 39 // pause
+            });
+        }
+        
+        sessionStartData.lastState = 2;
+        
+        // Update live session
+        const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
+        upsertLiveSession({
+            date: sessionStartData.date,
+            duration: sessionStartData.duration,
+            steps: sessionStartData.steps,
+            distance: sessionStartData.distance,
+            calories: calories + ' kcal',
+            avgSpeed: avgSpeed,
+            speedUnit: sessionStartData.speedUnit || '',
+            laps: sessionStartData.laps,
+            segments: sessionStartData.segments,
+            samples: sessionStartData.samples,
+            speedSum: sessionStartData.speedSum,
+            speedCount: sessionStartData.speedCount,
+            lastUpdated: now
+        });
+        
+    } else if (running_state === 3 && sessionActive && sessionStartData) {
+        // Stopped - finalize session
+        if (sessionStartData.lastState === 1) {
+            // Close final lap if we were running
+            const lapDistance = distance - sessionStartData.currentLapStartDistance;
+            sessionStartData.laps.push({
+                startTime: sessionStartData.currentLapStart,
+                endTime: now,
+                length: {
+                    value: lapDistance, // keep in meters (treadmill reports in meters)
+                    type: "METERS"
+                }
+            });
+        }
+        
+        // Close final segment (whether active or pause)
+        if (sessionStartData.segments.length > 0) {
+            const lastSegment = sessionStartData.segments[sessionStartData.segments.length - 1];
+            if (lastSegment.endTime === null) {
+                lastSegment.endTime = now;
+            }
+        }
+        
+        // Update final session stats before finishing
+        sessionStartData.steps = steps;
+        sessionStartData.calories = calories;
+        sessionStartData.distance = distance;
+        sessionStartData.duration = durationSec;
+        
+        // Save final state
+        const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
+        upsertLiveSession({
+            date: sessionStartData.date,
+            duration: sessionStartData.duration,
+            steps: sessionStartData.steps,
+            distance: sessionStartData.distance,
+            calories: calories + ' kcal',
+            avgSpeed: avgSpeed,
+            speedUnit: sessionStartData.speedUnit || '',
+            laps: sessionStartData.laps,
+            segments: sessionStartData.segments,
+            samples: sessionStartData.samples,
+            speedSum: sessionStartData.speedSum,
+            speedCount: sessionStartData.speedCount,
+            lastUpdated: now
+        });
+        
+        finishSession('Stopped');
     }
 
     // --- Heartbeat/data send logic, like _notification_handler ---
@@ -650,6 +895,9 @@ function clearCurrentSession() {
 }
 
 function upsertLiveSession(session) {
+    // Debug: log the session being saved
+    console.log('Upserting session with date:', session.date, 'Full session:', session);
+    
     let sessions = loadSessions();
     if (sessions.length > 0 && sessions[0] && sessions[0].date === session.date) {
         sessions[0] = session;
