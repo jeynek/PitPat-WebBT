@@ -460,7 +460,8 @@ function handleNotification(event) {
                         sessionStartData.segments.push({
                             startTime: now,
                             endTime: null,
-                            segmentType: 47 // active
+                            segmentType: 47, // active
+                            repetitions: 1
                         });
                     }
                 }
@@ -506,7 +507,8 @@ function handleNotification(event) {
         sessionStartData.segments.push({
             startTime: now,
             endTime: null,
-            segmentType: 47 // active
+            segmentType: 47, // active
+            repetitions: 1
         });
         
         // Save initial session
@@ -562,7 +564,8 @@ function handleNotification(event) {
             sessionStartData.segments.push({
                 startTime: now,
                 endTime: null,
-                segmentType: 47 // active
+                segmentType: 47, // active
+                repetitions: 1
             });
             
             // Start new lap
@@ -616,7 +619,8 @@ function handleNotification(event) {
             sessionStartData.segments.push({
                 startTime: now,
                 endTime: null,
-                segmentType: 39 // pause
+                segmentType: 39, // pause
+                repetitions: 1
             });
         }
         
