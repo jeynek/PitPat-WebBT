@@ -33,8 +33,8 @@ const uploadToServerBtn = document.getElementById('uploadToServerBtn');
 // --- Configuration for HTTP POST ---
 const SERVER_URL = 'http://127.0.0.1:1821/';
 
-// --- Helper function to calculate steps ---
-function calculateSteps(distanceKm, speedKmh) {
+// --- Helper function to calculate  ---
+function calculate(distanceKm, speedKmh) {
     if (speedKmh <= 0) return 0;
     
     // Convert distance to meters
@@ -382,11 +382,7 @@ function handleNotification(event) {
     const speed_unit = unit_mode === 1 ? "mph" : "kph";
     const distance_unit = unit_mode === 1 ? "mi" : "km";
     
-    // Calculate steps from treadmill distance and current speed
-    const currentSpeedKmh = current_speed / 1000;
-    const distanceKm = distance / 1000;
-    const calculatedSteps = calculateSteps(distanceKm, currentSpeedKmh);
-    
+
     treadmillData = {
         speed: currentSpeedKmh.toFixed(2) + " " + speed_unit,
         distance: distanceKm.toFixed(2) + " " + distance_unit,
@@ -537,6 +533,16 @@ function handleNotification(event) {
         sessionStartData.duration = durationSec;
         sessionStartData.speedSum += current_speed;
         sessionStartData.speedCount += 1;
+    // Calculate steps from treadmill distance and current speed
+    const currentSpeedKmh = current_speed / 1000;
+    const distanceKm = distance / 1000;
+    // Use average speed if we have session data, otherwise use current speed
+    let speedForSteps = currentSpeedKmh;
+    if (sessionStartData && sessionStartData.speedCount > 0) {
+        speedForSteps = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
+    }
+
+const calculatedSteps = calculateSteps(distanceKm, speedForSteps);  // ← CORRECT: using average speed
         
         // Check if speed changed and record sample
         if (current_speed !== sessionStartData.lastRecordedSpeed) {
