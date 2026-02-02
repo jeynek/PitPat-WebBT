@@ -494,6 +494,24 @@ function handleNotification(event) {
             segmentType: 47, // active
             repetitions: 1
         });
+        
+        // Save initial session
+        const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
+        upsertLiveSession({
+            date: sessionStartData.date,
+            duration: sessionStartData.duration,
+            steps: 0,
+            distance: sessionStartData.distance,
+            calories: calories + ' kcal',
+            avgSpeed: avgSpeed,
+            speedUnit: sessionStartData.speedUnit || '',
+            laps: sessionStartData.laps,
+            segments: sessionStartData.segments,
+            samples: sessionStartData.samples,
+            speedSum: sessionStartData.speedSum,
+            speedCount: sessionStartData.speedCount,
+            lastUpdated: now
+        });
     }
     
     // Update speed stats FIRST (before calculating steps)
@@ -660,6 +678,18 @@ function handleNotification(event) {
             if (lastSegment.endTime === null) {
                 lastSegment.endTime = now;
             }
+        }
+        
+        // Record final speed sample (speed at stop)
+        if (current_speed !== sessionStartData.lastRecordedSpeed) {
+            sessionStartData.samples.push({
+                time: now,
+                speed: {
+                    value: current_speed / 1000,
+                    type: speed_unit === 'mph' ? 'MILES_PER_HOUR' : 'KILOMETERS_PER_HOUR'
+                }
+            });
+            sessionStartData.lastRecordedSpeed = current_speed;
         }
         
         // Update final session stats before finishing
