@@ -33,8 +33,8 @@ const uploadToServerBtn = document.getElementById('uploadToServerBtn');
 // --- Configuration for HTTP POST ---
 const SERVER_URL = 'http://127.0.0.1:1821/';
 
-// --- Helper function to calculate  ---
-function calculate(distanceKm, speedKmh) {
+// --- Helper function to calculate steps ---
+function calculateSteps(distanceKm, speedKmh) {
     if (speedKmh <= 0) return 0;
     
     // Convert distance to meters
@@ -382,24 +382,12 @@ function handleNotification(event) {
     const speed_unit = unit_mode === 1 ? "mph" : "kph";
     const distance_unit = unit_mode === 1 ? "mi" : "km";
     
-
-    treadmillData = {
-        speed: currentSpeedKmh.toFixed(2) + " " + speed_unit,
-        distance: distanceKm.toFixed(2) + " " + distance_unit,
-        calories: calories + " kcal",
-        steps: calculatedSteps,
-        duration: Math.round(duration / 1000),
-        status: statusArr[running_state] || "Unknown",
-        _raw: { current_speed, distance, calories, steps: calculatedSteps, duration, speed_unit }
-    };
-    // Log parsed fields
-    console.log("Parsed treadmill data:", treadmillData);
-    updateDashboard(treadmillData);
-    updateRunningState(running_state);
-
-    // --- Session tracking logic with laps and segments ---
-    const now = Date.now();
+    const currentSpeedKmh = current_speed / 1000;
+    const distanceKm = distance / 1000;
     const durationSec = Math.round(duration / 1000);
+    const now = Date.now();
+    
+    // --- Session tracking logic with laps and segments ---
     
     // Check if we should resume an existing session
     // Don't try to resume if we just finished a session (sessionActive is false but we just set it to false)
@@ -423,10 +411,10 @@ function handleNotification(event) {
                 sessionActive = true;
                 sessionStartData = {
                     date: lastSession.date,
-                    steps: calculatedSteps,
-                    calories: calories,
-                    distance: distance,
-                    duration: durationSec,
+                    steps: lastSession.steps,
+                    calories: lastSession.calories,
+                    distance: lastSession.distance,
+                    duration: lastSession.duration,
                     speedSum: lastSession.speedSum || (lastSession.avgSpeed * (lastSession.speedCount || 1) * 1000),
                     speedCount: lastSession.speedCount || 1,
                     speedUnit: speed_unit,
@@ -473,7 +461,7 @@ function handleNotification(event) {
         sessionActive = true;
         sessionStartData = {
             date: now,
-            steps: calculatedSteps,
+            steps: 0,
             calories: calories,
             distance: distance,
             duration: durationSec,
@@ -506,43 +494,12 @@ function handleNotification(event) {
             segmentType: 47, // active
             repetitions: 1
         });
-        
-        // Save initial session
-        const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
-        upsertLiveSession({
-            date: sessionStartData.date,
-            duration: sessionStartData.duration,
-            steps: calculatedSteps,
-            distance: sessionStartData.distance,
-            calories: calories + ' kcal',
-            avgSpeed: avgSpeed,
-            speedUnit: sessionStartData.speedUnit || '',
-            laps: sessionStartData.laps,
-            segments: sessionStartData.segments,
-            samples: sessionStartData.samples,
-            speedSum: sessionStartData.speedSum,
-            speedCount: sessionStartData.speedCount,
-            lastUpdated: now
-        });
-        
-    } else if (running_state === 1 && sessionActive && sessionStartData) {
-        // Continue running - update session stats
-        sessionStartData.steps = calculatedSteps;
-        sessionStartData.calories = calories;
-        sessionStartData.distance = distance;
-        sessionStartData.duration = durationSec;
+    }
+    
+    // Update speed stats FIRST (before calculating steps)
+    if (running_state === 1 && sessionActive && sessionStartData) {
         sessionStartData.speedSum += current_speed;
         sessionStartData.speedCount += 1;
-    // Calculate steps from treadmill distance and current speed
-    const currentSpeedKmh = current_speed / 1000;
-    const distanceKm = distance / 1000;
-    // Use average speed if we have session data, otherwise use current speed
-    let speedForSteps = currentSpeedKmh;
-    if (sessionStartData && sessionStartData.speedCount > 0) {
-        speedForSteps = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
-    }
-
-const calculatedSteps = calculateSteps(distanceKm, speedForSteps);  // ← CORRECT: using average speed
         
         // Check if speed changed and record sample
         if (current_speed !== sessionStartData.lastRecordedSpeed) {
@@ -580,6 +537,38 @@ const calculatedSteps = calculateSteps(distanceKm, speedForSteps);  // ← CORRE
         }
         
         sessionStartData.lastState = 1;
+    }
+    
+    // Calculate steps using AVERAGE speed (after updating speedSum/speedCount)
+    let speedForSteps = currentSpeedKmh;
+    if (sessionActive && sessionStartData && sessionStartData.speedCount > 0) {
+        speedForSteps = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
+    }
+    const calculatedSteps = calculateSteps(distanceKm, speedForSteps);
+    
+    // Create treadmillData object
+    treadmillData = {
+        speed: currentSpeedKmh.toFixed(2) + " " + speed_unit,
+        distance: distanceKm.toFixed(2) + " " + distance_unit,
+        calories: calories + " kcal",
+        steps: calculatedSteps,
+        duration: durationSec,
+        status: statusArr[running_state] || "Unknown",
+        _raw: { current_speed, distance, calories, steps: calculatedSteps, duration, speed_unit }
+    };
+    
+    // Log parsed fields
+    console.log("Parsed treadmill data:", treadmillData);
+    updateDashboard(treadmillData);
+    updateRunningState(running_state);
+    
+    // Continue with session updates
+    if (running_state === 1 && sessionActive && sessionStartData) {
+        // Update session data
+        sessionStartData.steps = calculatedSteps;
+        sessionStartData.calories = calories;
+        sessionStartData.distance = distance;
+        sessionStartData.duration = durationSec;
         
         // Update live session
         const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
@@ -887,7 +876,7 @@ speedUpBtn.addEventListener('click', () => {
 
 speedDownBtn.addEventListener('click', () => {
     if (!connected) return;
-    curTargetSpeed = Math.max(curTargetSpeed - 1000, 1000);
+    curTargetSpeed = Math.max(curTargetSpeed - 100, 1000);
     send_data(makePacket("set_speed", curTargetSpeed));
 });
 
@@ -1015,32 +1004,8 @@ function showToast(message, timeout = 4000) {
         alert(message); // fallback
     }
 }
-// Start auto-save every 5 minutes (300000 ms)
-// You can change to 10 minutes: 600000, etc.
-//setInterval(autoSaveSessionsToFile, 5 * 60 * 1000);
 
-// Optional: also save immediately when the page loads (useful for testing)
-//setTimeout(autoSaveSessionsToFile, 10000); // after 10 seconds
-// Manual upload button
-/*-const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
-if (uploadToTaskerBtn) {
-    uploadToTaskerBtn.addEventListener('click', async () => {
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: 'Upload to Google Fit',
-                    text: 'pitpat_upload_trigger'
-                });
-                showToast('Select Tasker from share menu');
-            } catch (err) {
-                showToast('Share cancelled');
-            }
-        } else {
-            showToast('Share API not available');
-        }
-    });
-}
->*/
+// Tasker upload button
 const uploadToTaskerBtn = document.getElementById('uploadToTaskerBtn');
 if (uploadToTaskerBtn) {
     uploadToTaskerBtn.onclick = () => {
