@@ -194,6 +194,11 @@ function updateDashboard(data) {
     } else {
         durationDiv.textContent = data.duration || '-';
     }
+    // Update average speed if available
+    const avgSpeedDiv = document.getElementById('avgSpeed');
+    if (avgSpeedDiv) {
+        avgSpeedDiv.textContent = data.avgSpeed || '-';
+    }
 }
 function enableControls(enable) {
     startBtn.disabled = !enable;
@@ -425,7 +430,8 @@ function handleNotification(event) {
                     currentLapStartDistance: distance,
                     currentSegmentStart: now,
                     lastState: running_state,
-                    lastRecordedSpeed: current_speed
+                    lastRecordedSpeed: current_speed,
+                    lastDistance: lastSession.lastDistance || lastSession.distance  // ← Restore lastDistance
                 };
                 
                 // If we're running, ensure we have an active segment
@@ -475,7 +481,8 @@ function handleNotification(event) {
             currentLapStartDistance: distance,
             currentSegmentStart: now,
             lastState: 1, // 1 = running
-            lastRecordedSpeed: current_speed
+            lastRecordedSpeed: current_speed,
+            lastDistance: distance  // ← Track last distance for incremental calculation
         };
         
         // Record initial speed sample
@@ -510,7 +517,8 @@ function handleNotification(event) {
             samples: sessionStartData.samples,
             speedSum: sessionStartData.speedSum,
             speedCount: sessionStartData.speedCount,
-            lastUpdated: now
+            lastUpdated: now,
+            lastDistance: distance  // ← Save lastDistance
         });
     }
     
@@ -557,20 +565,58 @@ function handleNotification(event) {
         sessionStartData.lastState = 1;
     }
     
-    // Calculate steps using AVERAGE speed (after updating speedSum/speedCount)
-    let speedForSteps = currentSpeedKmh;
-    if (sessionActive && sessionStartData && sessionStartData.speedCount > 0) {
-        speedForSteps = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
+    // Calculate steps INCREMENTALLY using distance delta
+    let calculatedSteps = 0;
+    if (sessionActive && sessionStartData) {
+        // Check if treadmill distance went backwards (reset)
+        if (distance < sessionStartData.lastDistance) {
+            console.log('Treadmill distance reset detected, resetting lastDistance to 0');
+            sessionStartData.lastDistance = 0;
+            sessionStartData.steps = 0; // Reset steps too
+        }
+        
+        // Calculate distance delta since last update
+        const deltaDistance = distance - sessionStartData.lastDistance;
+        
+        if (deltaDistance > 0) {
+            // Calculate average speed
+            const avgSpeedKmh = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
+            
+            // Calculate stride length based on average speed
+            const stepLengthMeters = 0.327 + (avgSpeedKmh - 1) * 0.0765;
+            
+            // Calculate steps for the delta distance
+            const deltaSteps = Math.floor(deltaDistance / stepLengthMeters);
+            
+            // Add to accumulated steps
+            sessionStartData.steps += deltaSteps;
+            sessionStartData.lastDistance = distance;
+            
+            console.log(`Delta: ${deltaDistance}m, Avg speed: ${avgSpeedKmh.toFixed(2)} kph, Stride: ${stepLengthMeters.toFixed(3)}m, Delta steps: ${deltaSteps}, Total steps: ${sessionStartData.steps}`);
+        }
+        
+        calculatedSteps = sessionStartData.steps;
+    } else {
+        // No active session, calculate from scratch (for display purposes)
+        const distanceKm = distance / 1000;
+        const speedForSteps = currentSpeedKmh;
+        calculatedSteps = calculateSteps(distanceKm, speedForSteps);
     }
-    const calculatedSteps = calculateSteps(distanceKm, speedForSteps);
     
     // Create treadmillData object
+    let avgSpeedDisplay = '-';
+    if (sessionActive && sessionStartData && sessionStartData.speedCount > 0) {
+        const avgSpeedKmh = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
+        avgSpeedDisplay = avgSpeedKmh.toFixed(2) + " " + speed_unit;
+    }
+    
     treadmillData = {
         speed: currentSpeedKmh.toFixed(2) + " " + speed_unit,
         distance: distanceKm.toFixed(2) + " " + distance_unit,
         calories: calories + " kcal",
         steps: calculatedSteps,
         duration: durationSec,
+        avgSpeed: avgSpeedDisplay,
         status: statusArr[running_state] || "Unknown",
         _raw: { current_speed, distance, calories, steps: calculatedSteps, duration, speed_unit }
     };
@@ -603,7 +649,8 @@ function handleNotification(event) {
             samples: sessionStartData.samples,
             speedSum: sessionStartData.speedSum,
             speedCount: sessionStartData.speedCount,
-            lastUpdated: now
+            lastUpdated: now,
+            lastDistance: sessionStartData.lastDistance
         });
         
     } else if (running_state === 2 && sessionActive && sessionStartData) {
@@ -654,7 +701,8 @@ function handleNotification(event) {
             samples: sessionStartData.samples,
             speedSum: sessionStartData.speedSum,
             speedCount: sessionStartData.speedCount,
-            lastUpdated: now
+            lastUpdated: now,
+            lastDistance: sessionStartData.lastDistance
         });
         
     } else if (running_state === 3 && sessionActive && sessionStartData) {
@@ -713,7 +761,8 @@ function handleNotification(event) {
             samples: sessionStartData.samples,
             speedSum: sessionStartData.speedSum,
             speedCount: sessionStartData.speedCount,
-            lastUpdated: now
+            lastUpdated: now,
+            lastDistance: sessionStartData.lastDistance
         });
         
         finishSession('Stopped');
@@ -900,13 +949,13 @@ stopBtn.addEventListener('click', () => {
 
 speedUpBtn.addEventListener('click', () => {
     if (!connected) return;
-    curTargetSpeed = Math.min(curTargetSpeed + 100, 6000);
+    curTargetSpeed = Math.min(curTargetSpeed + 500, 6000);
     send_data(makePacket("set_speed", curTargetSpeed));
 });
 
 speedDownBtn.addEventListener('click', () => {
     if (!connected) return;
-    curTargetSpeed = Math.max(curTargetSpeed - 100, 1000);
+    curTargetSpeed = Math.max(curTargetSpeed - 500, 1000);
     send_data(makePacket("set_speed", curTargetSpeed));
 });
 
