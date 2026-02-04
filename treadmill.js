@@ -579,11 +579,24 @@ function handleNotification(event) {
         const deltaDistance = distance - sessionStartData.lastDistance;
         
         if (deltaDistance > 0) {
-            // Calculate average speed
-            const avgSpeedKmh = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
+            // Determine which speed to use based on delta size
+            // Small delta (< 50m) = normal operation, use current speed
+            // Large delta (>= 50m) = reconnection or long gap, use average speed
+            const RECONNECTION_THRESHOLD = 50; // meters
+            let speedForSteps;
             
-            // Calculate stride length based on average speed
-            const stepLengthMeters = 0.327 + (avgSpeedKmh - 1) * 0.0765;
+            if (deltaDistance < RECONNECTION_THRESHOLD) {
+                // Normal operation - use current instantaneous speed
+                speedForSteps = current_speed / 1000;
+                console.log(`Small delta (${deltaDistance}m): using current speed ${speedForSteps.toFixed(2)} kph`);
+            } else {
+                // Reconnection or large gap - use average speed
+                speedForSteps = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
+                console.log(`Large delta (${deltaDistance}m): using average speed ${speedForSteps.toFixed(2)} kph`);
+            }
+            
+            // Calculate stride length based on chosen speed
+            const stepLengthMeters = 0.327 + (speedForSteps - 1) * 0.0765;
             
             // Calculate steps for the delta distance
             const deltaSteps = Math.floor(deltaDistance / stepLengthMeters);
@@ -592,7 +605,7 @@ function handleNotification(event) {
             sessionStartData.steps += deltaSteps;
             sessionStartData.lastDistance = distance;
             
-            console.log(`Delta: ${deltaDistance}m, Avg speed: ${avgSpeedKmh.toFixed(2)} kph, Stride: ${stepLengthMeters.toFixed(3)}m, Delta steps: ${deltaSteps}, Total steps: ${sessionStartData.steps}`);
+            console.log(`Delta: ${deltaDistance}m, Speed: ${speedForSteps.toFixed(2)} kph, Stride: ${stepLengthMeters.toFixed(3)}m, Delta steps: ${deltaSteps}, Total steps: ${sessionStartData.steps}`);
         }
         
         calculatedSteps = sessionStartData.steps;
