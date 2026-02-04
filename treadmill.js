@@ -579,6 +579,8 @@ function handleNotification(event) {
         const deltaDistance = distance - sessionStartData.lastDistance;
         
         if (deltaDistance > 0) {
+            // Calculate average speed
+            const avgSpeedKmh = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
             // Determine which speed to use based on delta size
             // Small delta (< 50m) = normal operation, use current speed
             // Large delta (>= 50m) = reconnection or long gap, use average speed
@@ -605,7 +607,7 @@ function handleNotification(event) {
             sessionStartData.steps += deltaSteps;
             sessionStartData.lastDistance = distance;
             
-            console.log(`Delta: ${deltaDistance}m, Speed: ${speedForSteps.toFixed(2)} kph, Stride: ${stepLengthMeters.toFixed(3)}m, Delta steps: ${deltaSteps}, Total steps: ${sessionStartData.steps}`);
+            console.log(`Delta: ${deltaDistance}m, Avg speed: ${avgSpeedKmh.toFixed(2)} kph, Stride: ${stepLengthMeters.toFixed(3)}m, Delta steps: ${deltaSteps}, Total steps: ${sessionStartData.steps}`);
         }
         
         calculatedSteps = sessionStartData.steps;
