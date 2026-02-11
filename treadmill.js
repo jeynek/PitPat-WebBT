@@ -579,8 +579,6 @@ function handleNotification(event) {
         const deltaDistance = distance - sessionStartData.lastDistance;
         
         if (deltaDistance > 0) {
-            // Calculate average speed
-            const avgSpeedKmh = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
             // Determine which speed to use based on delta size
             // Small delta (< 50m) = normal operation, use current speed
             // Large delta (>= 50m) = reconnection or long gap, use average speed
@@ -607,7 +605,7 @@ function handleNotification(event) {
             sessionStartData.steps += deltaSteps;
             sessionStartData.lastDistance = distance;
             
-            console.log(`Delta: ${deltaDistance}m, Avg speed: ${avgSpeedKmh.toFixed(2)} kph, Stride: ${stepLengthMeters.toFixed(3)}m, Delta steps: ${deltaSteps}, Total steps: ${sessionStartData.steps}`);
+            console.log(`Delta: ${deltaDistance}m, Speed: ${speedForSteps.toFixed(2)} kph, Stride: ${stepLengthMeters.toFixed(3)}m, Delta steps: ${deltaSteps}, Total steps: ${sessionStartData.steps}`);
         }
         
         calculatedSteps = sessionStartData.steps;
@@ -729,7 +727,7 @@ function handleNotification(event) {
                 startTime: sessionStartData.currentLapStart,
                 endTime: now,
                 length: {
-                    value: lapDistance, // keep in meters (treadmill reports in meters)
+                    value: lapDistance,
                     type: "METERS"
                 }
             });
@@ -743,23 +741,39 @@ function handleNotification(event) {
             }
         }
         
-        // Record final speed sample (speed at stop)
-        if (current_speed !== sessionStartData.lastRecordedSpeed) {
+        // Record final speed sample - always use last KNOWN non-zero speed
+        // (treadmill reports current_speed=0 on stop, which is not useful)
+        const finalSpeed = current_speed > 0 ? current_speed : sessionStartData.lastRecordedSpeed;
+        if (finalSpeed > 0 && finalSpeed !== sessionStartData.lastRecordedSpeed) {
             sessionStartData.samples.push({
                 time: now,
                 speed: {
-                    value: current_speed / 1000,
+                    value: finalSpeed / 1000,
                     type: speed_unit === 'mph' ? 'MILES_PER_HOUR' : 'KILOMETERS_PER_HOUR'
                 }
             });
-            sessionStartData.lastRecordedSpeed = current_speed;
+        }
+        // Always ensure samples array has at least one entry at the end
+        if (sessionStartData.samples.length === 0 && finalSpeed > 0) {
+            sessionStartData.samples.push({
+                time: now,
+                speed: {
+                    value: finalSpeed / 1000,
+                    type: speed_unit === 'mph' ? 'MILES_PER_HOUR' : 'KILOMETERS_PER_HOUR'
+                }
+            });
         }
         
         // Update final session stats before finishing
+        // IMPORTANT: Only update duration if treadmill reports non-zero,
+        // otherwise keep the last known duration (treadmill resets to 0 on stop)
         sessionStartData.steps = calculatedSteps;
         sessionStartData.calories = calories;
         sessionStartData.distance = distance;
-        sessionStartData.duration = durationSec;
+        if (durationSec > 0) {
+            sessionStartData.duration = durationSec;
+        }
+        // else: keep sessionStartData.duration from last running notification
         
         // Save final state
         const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
