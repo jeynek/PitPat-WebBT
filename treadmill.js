@@ -744,17 +744,7 @@ function handleNotification(event) {
         // Record final speed sample - always use last KNOWN non-zero speed
         // (treadmill reports current_speed=0 on stop, which is not useful)
         const finalSpeed = current_speed > 0 ? current_speed : sessionStartData.lastRecordedSpeed;
-        if (finalSpeed > 0 && finalSpeed !== sessionStartData.lastRecordedSpeed) {
-            sessionStartData.samples.push({
-                time: now,
-                speed: {
-                    value: finalSpeed / 1000,
-                    type: speed_unit === 'mph' ? 'MILES_PER_HOUR' : 'KILOMETERS_PER_HOUR'
-                }
-            });
-        }
-        // Always ensure samples array has at least one entry at the end
-        if (sessionStartData.samples.length === 0 && finalSpeed > 0) {
+        if (finalSpeed > 0) {
             sessionStartData.samples.push({
                 time: now,
                 speed: {
