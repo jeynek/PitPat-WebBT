@@ -522,6 +522,11 @@ function handleNotification(event) {
         });
     }
     
+    // Always track last known non-zero speed regardless of state
+    if (current_speed > 0 && sessionActive && sessionStartData) {
+        sessionStartData.lastRecordedSpeed = current_speed;
+    }
+    
     // Update speed stats FIRST (before calculating steps)
     if (running_state === 1 && sessionActive && sessionStartData) {
         sessionStartData.speedSum += current_speed;
@@ -536,7 +541,6 @@ function handleNotification(event) {
                     type: speed_unit === 'mph' ? 'MILES_PER_HOUR' : 'KILOMETERS_PER_HOUR'
                 }
             });
-            sessionStartData.lastRecordedSpeed = current_speed;
         }
         
         // If we just resumed from pause, close pause segment and start active segment
@@ -755,10 +759,12 @@ function handleNotification(event) {
         }
         
         // Update final session stats before finishing
-        // IMPORTANT: Only update duration if treadmill reports non-zero,
-        // otherwise keep the last known duration (treadmill resets to 0 on stop)
+        // IMPORTANT: Only update duration/calories if treadmill reports non-zero,
+        // otherwise keep the last known values (treadmill resets them to 0 on stop)
         sessionStartData.steps = calculatedSteps;
-        sessionStartData.calories = calories;
+        if (calories > 0) {
+            sessionStartData.calories = calories;
+        }
         sessionStartData.distance = distance;
         if (durationSec > 0) {
             sessionStartData.duration = durationSec;
@@ -772,7 +778,7 @@ function handleNotification(event) {
             duration: sessionStartData.duration,
             steps: calculatedSteps,
             distance: sessionStartData.distance,
-            calories: calories + ' kcal',
+            calories: sessionStartData.calories + ' kcal',
             avgSpeed: avgSpeed,
             speedUnit: sessionStartData.speedUnit || '',
             laps: sessionStartData.laps,
