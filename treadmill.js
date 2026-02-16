@@ -339,6 +339,29 @@ function onDisconnected() {
     showToast('Disconnected - session will resume on reconnect');
 }
 
+// --- Helper to build a consistent session object for saving ---
+function buildSessionObject(sd, steps, calories, avgSpeed, now) {
+    return {
+        date: sd.date,
+        duration: sd.duration,
+        steps: steps,
+        distance: sd.distance,
+        calories: sd.calories + ' kcal',
+        avgSpeed: avgSpeed,
+        speedUnit: sd.speedUnit || '',
+        laps: sd.laps,
+        segments: sd.segments,
+        samples: sd.samples,
+        speedSum: sd.speedSum,
+        speedCount: sd.speedCount,
+        lastUpdated: now,
+        lastDistance: sd.lastDistance,
+        currentLapStart: sd.currentLapStart,
+        currentLapStartDistance: sd.currentLapStartDistance,
+        lastSampleTime: sd.lastSampleTime || 0
+    };
+}
+
 function handleNotification(event) {
     const value = event.target.value;
     // Logging for debugging
@@ -426,12 +449,13 @@ function handleNotification(event) {
                     laps: lastSession.laps || [],
                     segments: lastSession.segments || [],
                     samples: lastSession.samples || [],
-                    currentLapStart: now,
-                    currentLapStartDistance: distance,
+                    currentLapStart: lastSession.currentLapStart || now,
+                    currentLapStartDistance: lastSession.currentLapStartDistance || lastSession.distance,
                     currentSegmentStart: now,
                     lastState: running_state,
                     lastRecordedSpeed: current_speed,
-                    lastDistance: lastSession.lastDistance || lastSession.distance  // ← Restore lastDistance
+                    lastDistance: lastSession.lastDistance || lastSession.distance,
+                    lastSampleTime: lastSession.lastSampleTime || 0
                 };
                 
                 // If we're running, ensure we have an active segment
@@ -504,27 +528,7 @@ function handleNotification(event) {
         
         // Save initial session
         const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
-        upsertLiveSession({
-            date: sessionStartData.date,
-            duration: sessionStartData.duration,
-            steps: 0,
-            distance: sessionStartData.distance,
-            calories: calories + ' kcal',
-            avgSpeed: avgSpeed,
-            speedUnit: sessionStartData.speedUnit || '',
-            laps: sessionStartData.laps,
-            segments: sessionStartData.segments,
-            samples: sessionStartData.samples,
-            speedSum: sessionStartData.speedSum,
-            speedCount: sessionStartData.speedCount,
-            lastUpdated: now,
-            lastDistance: distance  // ← Save lastDistance
-        });
-    }
-    
-    // Always track last known non-zero speed regardless of state
-    if (current_speed > 0 && sessionActive && sessionStartData) {
-        sessionStartData.lastRecordedSpeed = current_speed;
+        upsertLiveSession(buildSessionObject(sessionStartData, 0, calories, avgSpeed, now));
     }
     
     // Update speed stats FIRST (before calculating steps)
@@ -532,8 +536,12 @@ function handleNotification(event) {
         sessionStartData.speedSum += current_speed;
         sessionStartData.speedCount += 1;
         
-        // Check if speed changed and record sample
-        if (current_speed !== sessionStartData.lastRecordedSpeed) {
+        // Record speed sample every 5 minutes OR on speed change, never 0
+        const SAMPLE_INTERVAL_MS = 5 * 60 * 1000;
+        const lastSampleTime = sessionStartData.lastSampleTime || 0;
+        const speedChanged = current_speed !== sessionStartData.lastRecordedSpeed;
+        const intervalElapsed = now - lastSampleTime >= SAMPLE_INTERVAL_MS;
+        if ((speedChanged || intervalElapsed) && current_speed > 0) {
             sessionStartData.samples.push({
                 time: now,
                 speed: {
@@ -541,6 +549,7 @@ function handleNotification(event) {
                     type: speed_unit === 'mph' ? 'MILES_PER_HOUR' : 'KILOMETERS_PER_HOUR'
                 }
             });
+            sessionStartData.lastSampleTime = now;
         }
         
         // If we just resumed from pause, close pause segment and start active segment
@@ -561,12 +570,17 @@ function handleNotification(event) {
                 repetitions: 1
             });
             
-            // Start new lap
+            // Start new lap - use current distance as start point
             sessionStartData.currentLapStart = now;
             sessionStartData.currentLapStartDistance = distance;
         }
         
         sessionStartData.lastState = 1;
+    }
+    
+    // Always track last known non-zero speed regardless of state
+    if (current_speed > 0 && sessionActive && sessionStartData) {
+        sessionStartData.lastRecordedSpeed = current_speed;
     }
     
     // Calculate steps INCREMENTALLY using distance delta
@@ -653,22 +667,7 @@ function handleNotification(event) {
         
         // Update live session
         const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
-        upsertLiveSession({
-            date: sessionStartData.date,
-            duration: sessionStartData.duration,
-            steps: calculatedSteps,
-            distance: sessionStartData.distance,
-            calories: calories + ' kcal',
-            avgSpeed: avgSpeed,
-            speedUnit: sessionStartData.speedUnit || '',
-            laps: sessionStartData.laps,
-            segments: sessionStartData.segments,
-            samples: sessionStartData.samples,
-            speedSum: sessionStartData.speedSum,
-            speedCount: sessionStartData.speedCount,
-            lastUpdated: now,
-            lastDistance: sessionStartData.lastDistance
-        });
+        upsertLiveSession(buildSessionObject(sessionStartData, calculatedSteps, calories, avgSpeed, now));
         
     } else if (running_state === 2 && sessionActive && sessionStartData) {
         // Paused - close current lap and active segment, start pause segment
@@ -679,7 +678,7 @@ function handleNotification(event) {
                 startTime: sessionStartData.currentLapStart,
                 endTime: now,
                 length: {
-                    value: lapDistance, // keep in meters (treadmill reports in meters)
+                    value: lapDistance,
                     type: "METERS"
                 }
             });
@@ -705,22 +704,7 @@ function handleNotification(event) {
         
         // Update live session
         const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
-        upsertLiveSession({
-            date: sessionStartData.date,
-            duration: sessionStartData.duration,
-            steps: calculatedSteps,
-            distance: sessionStartData.distance,
-            calories: calories + ' kcal',
-            avgSpeed: avgSpeed,
-            speedUnit: sessionStartData.speedUnit || '',
-            laps: sessionStartData.laps,
-            segments: sessionStartData.segments,
-            samples: sessionStartData.samples,
-            speedSum: sessionStartData.speedSum,
-            speedCount: sessionStartData.speedCount,
-            lastUpdated: now,
-            lastDistance: sessionStartData.lastDistance
-        });
+        upsertLiveSession(buildSessionObject(sessionStartData, calculatedSteps, calories, avgSpeed, now));
         
     } else if (running_state === 3 && sessionActive && sessionStartData) {
         // Stopped - finalize session
@@ -769,26 +753,10 @@ function handleNotification(event) {
         if (durationSec > 0) {
             sessionStartData.duration = durationSec;
         }
-        // else: keep sessionStartData.duration from last running notification
         
         // Save final state
         const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
-        upsertLiveSession({
-            date: sessionStartData.date,
-            duration: sessionStartData.duration,
-            steps: calculatedSteps,
-            distance: sessionStartData.distance,
-            calories: sessionStartData.calories + ' kcal',
-            avgSpeed: avgSpeed,
-            speedUnit: sessionStartData.speedUnit || '',
-            laps: sessionStartData.laps,
-            segments: sessionStartData.segments,
-            samples: sessionStartData.samples,
-            speedSum: sessionStartData.speedSum,
-            speedCount: sessionStartData.speedCount,
-            lastUpdated: now,
-            lastDistance: sessionStartData.lastDistance
-        });
+        upsertLiveSession(buildSessionObject(sessionStartData, calculatedSteps, calories, avgSpeed, now));
         
         finishSession('Stopped');
     }
