@@ -453,9 +453,9 @@ function handleNotification(event) {
                     currentLapStartDistance: lastSession.currentLapStartDistance || lastSession.distance,
                     currentSegmentStart: now,
                     lastState: running_state,
-                    lastRecordedSpeed: current_speed,
+                    lastRecordedSpeed: 0,       // ← Reset so first real speed after reconnect triggers a sample
                     lastDistance: lastSession.lastDistance || lastSession.distance,
-                    lastSampleTime: lastSession.lastSampleTime || 0
+                    lastSampleTime: lastSession.lastSampleTime || now  // ← Restore or use now to avoid immediate fire
                 };
                 
                 // If we're running, ensure we have an active segment
@@ -504,19 +504,11 @@ function handleNotification(event) {
             currentLapStart: now,
             currentLapStartDistance: distance,
             currentSegmentStart: now,
-            lastState: 1, // 1 = running
-            lastRecordedSpeed: current_speed,
-            lastDistance: distance  // ← Track last distance for incremental calculation
+            lastState: 1,
+            lastRecordedSpeed: 0,       // ← Set to 0 so first real speed triggers speedChanged
+            lastSampleTime: now,        // ← Set to now so interval doesn't fire immediately
+            lastDistance: distance
         };
-        
-        // Record initial speed sample
-        sessionStartData.samples.push({
-            time: now,
-            speed: {
-                value: current_speed / 1000,
-                type: speed_unit === 'mph' ? 'MILES_PER_HOUR' : 'KILOMETERS_PER_HOUR'
-            }
-        });
         
         // Start first segment (active)
         sessionStartData.segments.push({
