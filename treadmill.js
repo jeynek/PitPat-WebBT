@@ -31,7 +31,7 @@ const snackbar = document.getElementById('snackbar');
 const uploadToServerBtn = document.getElementById('uploadToServerBtn');
 
 // --- Configuration for HTTP POST ---
-const SERVER_URL = 'http://127.0.0.1:1821/';
+const SERVER_URL = 'http://localhost:1821/';
 
 // --- Helper function to calculate steps ---
 function calculateSteps(distanceKm, speedKmh) {
