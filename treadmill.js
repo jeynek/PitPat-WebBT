@@ -174,12 +174,17 @@ function renderSessionTable() {
         } else {
             console.log(`Session ${i} has invalid date:`, s.date);
         }
+        // Ensure steps and calories are displayed cleanly
+        const displaySteps = Math.round(parseFloat(s.steps) || 0);
+        const displayCalories = typeof s.calories === 'string' ? s.calories.replace(' kcal', '') : s.calories;
+        const cleanCalories = Math.round(parseFloat(displayCalories) || 0) + ' kcal';
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${dateStr}</td>
             <td>${formatDuration(s.duration)}</td>
-            <td>${Math.round(s.steps)}</td>
-            <td>${s.calories}</td>
+            <td>${displaySteps}</td>
+            <td>${cleanCalories}</td>
             <td>${avgSpeedDisplay}</td>
             <td><button class="mdl-button mdl-js-button mdl-button--icon" title="Delete" onclick="window.deleteSessionFromTable(${i})"><i class="material-icons">delete</i></button></td>
         `;
