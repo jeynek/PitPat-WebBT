@@ -108,7 +108,10 @@ function saveSessions(sessions) {
 }
 // Auto-save sessions to a downloadable JSON file every X minutes
 function autoSaveSessionsToFile() {
-    const sessions = loadSessions();
+    const sessions = loadSessions().map(s => ({
+        ...s,
+        steps: Math.round(s.steps)
+    }));
     if (sessions.length === 0) return; // nothing to save
 
     const jsonString = JSON.stringify(sessions, null, 2);
@@ -175,7 +178,7 @@ function renderSessionTable() {
         tr.innerHTML = `
             <td>${dateStr}</td>
             <td>${formatDuration(s.duration)}</td>
-            <td>${s.steps}</td>
+            <td>${Math.round(s.steps)}</td>
             <td>${s.calories}</td>
             <td>${avgSpeedDisplay}</td>
             <td><button class="mdl-button mdl-js-button mdl-button--icon" title="Delete" onclick="window.deleteSessionFromTable(${i})"><i class="material-icons">delete</i></button></td>
@@ -905,7 +908,10 @@ async function uploadSessionToServer(sessionData) {
  * Upload all sessions to server
  */
 async function uploadAllSessionsToServer() {
-    const sessions = loadSessions();
+    const sessions = loadSessions().map(s => ({
+        ...s,
+        steps: Math.round(s.steps)
+    }));
     
     if (sessions.length === 0) {
         showToast('No sessions to upload');
@@ -1126,7 +1132,10 @@ if (restored && !sessionActive) {
 // --- Import/Export History ---
 if (exportHistoryBtn) {
     exportHistoryBtn.addEventListener('click', () => {
-        const sessions = loadSessions();
+        const sessions = loadSessions().map(s => ({
+            ...s,
+            steps: Math.round(s.steps)
+        }));
         const blob = new Blob([JSON.stringify(sessions, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
