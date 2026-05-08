@@ -186,6 +186,42 @@
                 padding: 0.4em 0.3em;
             }
         }
+        .calibration-group {
+            margin: 1em 0;
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 1em;
+            padding: 1em;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fff;
+            box-sizing: border-box;
+        }
+        .calibration-header {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #555;
+            margin-bottom: 0.5em;
+        }
+        .tap-btn {
+            height: 100px;
+            font-size: 1.5em !important;
+            font-weight: bold !important;
+            background-color: #2196F3 !important;
+            color: #fff !important;
+        }
+        .calibration-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .calibration-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+        }
     </style>
 </head>
 <body>
@@ -241,6 +277,30 @@
                     <div class="slider-group">
                         <label class="slider-label" for="speedSlider">Set Speed (kph): <span id="sliderValue">0</span></label>
                         <input type="range" id="speedSlider" min="1" max="6" step="0.1" value="1" class="mdl-slider mdl-js-slider">
+                    </div>
+
+                    <!-- Calibration Interface -->
+                    <div class="calibration-group" id="calibrationGroup">
+                        <div class="calibration-header">Step Calibration (per 0.1 kph)</div>
+                        
+                        <div class="calibration-info">
+                            <span>Current Calibration: <span id="currentCalSpeed">1.0</span> kph</span>
+                            <span class="calibration-value"><span id="calibratedRate">-</span> steps/min</span>
+                        </div>
+
+                        <button id="tapBtn" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect tap-btn">
+                            TAP STEPS
+                        </button>
+
+                        <div class="slider-group" style="margin: 0;">
+                            <label class="slider-label" for="calSlider">Manual Adjustment: <span id="calSliderValue">0</span> steps/min</label>
+                            <input type="range" id="calSlider" min="50" max="250" step="1" value="100" class="mdl-slider mdl-js-slider">
+                        </div>
+
+                        <div style="display:flex; gap:0.5em;">
+                            <button id="saveCalBtn" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-button--colored" style="flex:1">Save</button>
+                            <button id="clearCalBtn" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect" style="flex:1">Clear</button>
+                        </div>
                     </div>
                 </div>
             </section>

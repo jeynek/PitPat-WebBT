@@ -30,23 +30,71 @@ const importHistoryInput = document.getElementById('importHistoryInput');
 const snackbar = document.getElementById('snackbar');
 const uploadToServerBtn = document.getElementById('uploadToServerBtn');
 
+// --- Calibration UI Elements ---
+const tapBtn = document.getElementById('tapBtn');
+const calSlider = document.getElementById('calSlider');
+const calSliderValue = document.getElementById('calSliderValue');
+const saveCalBtn = document.getElementById('saveCalBtn');
+const clearCalBtn = document.getElementById('clearCalBtn');
+const calibratedRateSpan = document.getElementById('calibratedRate');
+const currentCalSpeedSpan = document.getElementById('currentCalSpeed');
+
 // --- Configuration for HTTP POST ---
 const SERVER_URL = 'http://127.0.0.1:1821/';
 
 // --- Helper function to calculate steps ---
+function getCalibratedRate(speedKmh) {
+    const speedKey = speedKmh.toFixed(1);
+    const calibrations = loadCalibrations();
+    if (calibrations[speedKey]) {
+        return calibrations[speedKey];
+    }
+    // Fallback to linear formula: stepLengthMeters = 0.327 + (speedKmh - 1) * 0.0765
+    // speedKmh is in km/h. To get steps/min:
+    // Distance in 1 min (m) = (speedKmh * 1000) / 60
+    // Steps in 1 min = Distance_in_1_min / stepLengthMeters
+    const stepLengthMeters = 0.327 + (speedKmh - 1) * 0.0765;
+    const distancePerMin = (speedKmh * 1000) / 60;
+    return distancePerMin / stepLengthMeters;
+}
+
 function calculateSteps(distanceKm, speedKmh) {
     if (speedKmh <= 0) return 0;
     
     // Convert distance to meters
     const distanceMeters = distanceKm * 1000;
     
-    // Calculate step length in meters using your calibrated formula
-    const stepLengthMeters = 0.327 + (speedKmh - 1) * 0.0765;
+    // Check for manual calibration (per 0.1 kph)
+    const speedKey = speedKmh.toFixed(1);
+    const calibrations = loadCalibrations();
+    
+    let stepLengthMeters;
+    if (calibrations[speedKey]) {
+        // We have steps/min calibrated. 
+        // rate (steps/min) = (speedKmh * 1000 / 60) / stepLength
+        // stepLength = (speedKmh * 1000 / 60) / rate
+        const stepsPerMin = calibrations[speedKey];
+        const distancePerMin = (speedKmh * 1000) / 60;
+        stepLengthMeters = distancePerMin / stepsPerMin;
+    } else {
+        // Calculate step length in meters using your calibrated formula (fallback)
+        stepLengthMeters = 0.327 + (speedKmh - 1) * 0.0765;
+    }
     
     // Calculate steps
     const steps = distanceMeters / stepLengthMeters;
     
     return Math.floor(steps);
+}
+
+// --- Calibration Storage ---
+function loadCalibrations() {
+    try {
+        return JSON.parse(localStorage.getItem('treadmill_calibrations') || '{}');
+    } catch { return {}; }
+}
+function saveCalibrations(calibrations) {
+    localStorage.setItem('treadmill_calibrations', JSON.stringify(calibrations));
 }
 
 // --- Session History Logic ---
@@ -590,23 +638,27 @@ function handleNotification(event) {
         
         if (deltaDistance > 0) {
             // Determine which speed to use based on delta size
-            // Small delta (< 50m) = normal operation, use current speed
-            // Large delta (>= 50m) = reconnection or long gap, use average speed
             const RECONNECTION_THRESHOLD = 50; // meters
             let speedForSteps;
             
             if (deltaDistance < RECONNECTION_THRESHOLD) {
-                // Normal operation - use current instantaneous speed
                 speedForSteps = current_speed / 1000;
-                console.log(`Small delta (${deltaDistance}m): using current speed ${speedForSteps.toFixed(2)} kph`);
             } else {
-                // Reconnection or large gap - use average speed
                 speedForSteps = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
-                console.log(`Large delta (${deltaDistance}m): using average speed ${speedForSteps.toFixed(2)} kph`);
             }
             
-            // Calculate stride length based on chosen speed
-            const stepLengthMeters = 0.327 + (speedForSteps - 1) * 0.0765;
+            // Check for manual calibration (per 0.1 kph)
+            const speedKey = speedForSteps.toFixed(1);
+            const calibrations = loadCalibrations();
+            
+            let stepLengthMeters;
+            if (calibrations[speedKey]) {
+                const stepsPerMin = calibrations[speedKey];
+                const distancePerMin = (speedForSteps * 1000) / 60;
+                stepLengthMeters = distancePerMin / stepsPerMin;
+            } else {
+                stepLengthMeters = 0.327 + (speedForSteps - 1) * 0.0765;
+            }
             
             // Calculate steps for the delta distance
             const deltaSteps = Math.floor(deltaDistance / stepLengthMeters);
@@ -951,6 +1003,72 @@ speedSlider.addEventListener('change', () => {
     send_data(makePacket("set_speed", curTargetSpeed));
 });
 
+// --- Calibration Handlers ---
+let tapTimes = [];
+tapBtn.addEventListener('click', () => {
+    const now = Date.now();
+    tapTimes.push(now);
+    // Keep only last 10 taps or taps within last 10 seconds
+    const tenSecAgo = now - 10000;
+    tapTimes = tapTimes.filter(t => t > tenSecAgo);
+    
+    if (tapTimes.length > 1) {
+        const durationMs = tapTimes[tapTimes.length - 1] - tapTimes[0];
+        const intervals = tapTimes.length - 1;
+        const avgIntervalMs = durationMs / intervals;
+        const bpm = 60000 / avgIntervalMs;
+        const rate = Math.round(bpm);
+        calSlider.value = rate;
+        calSliderValue.textContent = rate;
+        updateCalUI();
+    }
+});
+
+calSlider.addEventListener('input', () => {
+    calSliderValue.textContent = calSlider.value;
+    updateCalUI();
+});
+
+saveCalBtn.addEventListener('click', () => {
+    const speed = parseFloat(speedSlider.value);
+    const speedKey = speed.toFixed(1);
+    const rate = parseInt(calSlider.value);
+    const calibrations = loadCalibrations();
+    calibrations[speedKey] = rate;
+    saveCalibrations(calibrations);
+    showToast(`Saved ${rate} steps/min for ${speedKey} kph`);
+    updateCalUI();
+});
+
+clearCalBtn.addEventListener('click', () => {
+    const speed = parseFloat(speedSlider.value);
+    const speedKey = speed.toFixed(1);
+    const calibrations = loadCalibrations();
+    delete calibrations[speedKey];
+    saveCalibrations(calibrations);
+    showToast(`Cleared calibration for ${speedKey} kph`);
+    updateCalUI();
+});
+
+function updateCalUI() {
+    const speed = parseFloat(speedSlider.value);
+    const speedKey = speed.toFixed(1);
+    currentCalSpeedSpan.textContent = speedKey;
+    
+    const calibrations = loadCalibrations();
+    if (calibrations[speedKey]) {
+        calibratedRateSpan.textContent = calibrations[speedKey];
+        calibratedRateSpan.style.color = "#388e3c"; // Green if manual
+    } else {
+        const rate = Math.round(getCalibratedRate(speed));
+        calibratedRateSpan.textContent = rate + " (auto)";
+        calibratedRateSpan.style.color = "#888";
+    }
+}
+
+// Update calibration UI when speed slider changes
+speedSlider.addEventListener('input', updateCalUI);
+
 // --- Upload to Server Button Handler ---
 if (uploadToServerBtn) {
     uploadToServerBtn.addEventListener('click', async () => {
@@ -962,6 +1080,8 @@ if (uploadToServerBtn) {
 updateDashboard({});
 updateRunningState(3);
 sliderValue.textContent = speedSlider.value;
+calSliderValue.textContent = calSlider.value;
+updateCalUI();
 renderSessionTable();
 
 function saveCurrentSession(session) {
