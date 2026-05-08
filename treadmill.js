@@ -68,23 +68,17 @@ function calculateSteps(distanceKm, speedKmh) {
     const speedKey = speedKmh.toFixed(1);
     const calibrations = loadCalibrations();
     
-    let stepLengthMeters;
+    let stepsPerMeter;
     if (calibrations[speedKey]) {
-        // We have steps/min calibrated. 
-        // rate (steps/min) = (speedKmh * 1000 / 60) / stepLength
-        // stepLength = (speedKmh * 1000 / 60) / rate
         const stepsPerMin = calibrations[speedKey];
-        const distancePerMin = (speedKmh * 1000) / 60;
-        stepLengthMeters = distancePerMin / stepsPerMin;
+        const metersPerMin = (speedKmh * 1000) / 60;
+        stepsPerMeter = stepsPerMin / metersPerMin;
     } else {
-        // Calculate step length in meters using your calibrated formula (fallback)
-        stepLengthMeters = 0.327 + (speedKmh - 1) * 0.0765;
+        const stepLengthMeters = 0.327 + (speedKmh - 1) * 0.0765;
+        stepsPerMeter = 1 / stepLengthMeters;
     }
     
-    // Calculate steps
-    const steps = distanceMeters / stepLengthMeters;
-    
-    return Math.floor(steps);
+    return Math.floor(distanceMeters * stepsPerMeter);
 }
 
 // --- Calibration Storage ---
@@ -234,7 +228,7 @@ function updateDashboard(data) {
     speedDiv.textContent = data.speed || '-';
     distanceDiv.textContent = data.distance || '-';
     caloriesDiv.textContent = data.calories || '-';
-    stepsDiv.textContent = (data.steps !== undefined && data.steps !== null) ? data.steps : '-';
+    stepsDiv.textContent = (data.steps !== undefined && data.steps !== null) ? Math.floor(data.steps) : '-';
     if (data.duration && typeof data.duration === 'number') {
         durationDiv.textContent = formatDuration(data.duration);
     } else if (typeof data.duration === 'string' && !isNaN(parseFloat(data.duration))) {
@@ -651,23 +645,24 @@ function handleNotification(event) {
             const speedKey = speedForSteps.toFixed(1);
             const calibrations = loadCalibrations();
             
-            let stepLengthMeters;
+            let stepsPerMeter;
             if (calibrations[speedKey]) {
                 const stepsPerMin = calibrations[speedKey];
-                const distancePerMin = (speedForSteps * 1000) / 60;
-                stepLengthMeters = distancePerMin / stepsPerMin;
+                const metersPerMin = (speedForSteps * 1000) / 60;
+                stepsPerMeter = stepsPerMin / metersPerMin;
             } else {
-                stepLengthMeters = 0.327 + (speedForSteps - 1) * 0.0765;
+                const stepLengthMeters = 0.327 + (speedForSteps - 1) * 0.0765;
+                stepsPerMeter = 1 / stepLengthMeters;
             }
             
-            // Calculate steps for the delta distance
-            const deltaSteps = Math.floor(deltaDistance / stepLengthMeters);
+            // Calculate steps for the delta distance (accumulate float, display floor)
+            const deltaSteps = deltaDistance * stepsPerMeter;
             
             // Add to accumulated steps
-            sessionStartData.steps += deltaSteps;
+            sessionStartData.steps = (sessionStartData.steps || 0) + deltaSteps;
             sessionStartData.lastDistance = distance;
             
-            console.log(`Delta: ${deltaDistance}m, Speed: ${speedForSteps.toFixed(2)} kph, Stride: ${stepLengthMeters.toFixed(3)}m, Delta steps: ${deltaSteps}, Total steps: ${sessionStartData.steps}`);
+            console.log(`Delta: ${deltaDistance}m, Speed: ${speedForSteps.toFixed(2)} kph, Steps/m: ${stepsPerMeter.toFixed(4)}, Delta steps: ${deltaSteps.toFixed(2)}, Total steps: ${sessionStartData.steps.toFixed(2)}`);
         }
         
         calculatedSteps = sessionStartData.steps;
