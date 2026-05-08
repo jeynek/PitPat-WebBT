@@ -156,7 +156,6 @@ function renderSessionTable() {
     console.log('Rendering sessions:', sessions);
     historyTableBody.innerHTML = '';
     sessions.forEach((s, i) => {
-        console.log(`Rendering session ${i}: steps=${s.steps}, date=${s.date}`);
         let avgSpeedDisplay = '-';
         if (typeof s.avgSpeed === 'number' && !isNaN(s.avgSpeed)) {
             avgSpeedDisplay = s.avgSpeed.toFixed(2) + ' ' + (s.speedUnit || '');
