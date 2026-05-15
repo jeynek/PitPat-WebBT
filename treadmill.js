@@ -201,6 +201,8 @@ let treadmillData = {};
 let connected = false;
 let runningState = 3; // 0: Starting, 1: Running, 2: Paused, 3: Stopped
 let curTargetSpeed = 1000; // in treadmill units
+let wakeLock = null;
+let silentAudio = null;
 
 // --- Helper Functions ---
 
@@ -302,6 +304,52 @@ function formatDuration(seconds) {
     return parts.join(' ');
 }
 
+// --- Background Task Helpers ---
+async function requestWakeLock() {
+    try {
+        if ('wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.log('Wake Lock active');
+            wakeLock.addEventListener('release', () => {
+                console.log('Wake Lock released');
+            });
+        }
+    } catch (err) {
+        console.error(`${err.name}, ${err.message}`);
+    }
+}
+
+function releaseWakeLock() {
+    if (wakeLock !== null) {
+        wakeLock.release();
+        wakeLock = null;
+    }
+}
+
+function startSilentAudio() {
+    if (!silentAudio) {
+        // Create a silent audio element to keep the app alive in background
+        silentAudio = document.createElement('audio');
+        silentAudio.loop = true;
+        // 1 second of silence (base64)
+        silentAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFWm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==';
+        silentAudio.play().catch(e => console.log('Silent audio play blocked:', e));
+    }
+}
+
+function stopSilentAudio() {
+    if (silentAudio) {
+        silentAudio.pause();
+        silentAudio = null;
+    }
+}
+
+document.addEventListener('visibilitychange', async () => {
+    if (wakeLock !== null && document.visibilityState === 'visible') {
+        await requestWakeLock();
+    }
+});
+
 // --- Send Data Logic (replaces sendCommand) ---
 let pendingData = null;
 function send_data(packet) {
@@ -358,7 +406,11 @@ async function connectBluetooth() {
         setStatus('Stopped');
         connectBtn.textContent = "Disconnect";
         updateRunningState(3);
-        // No heartbeat loop, just send heartbeat or data on notification
+        
+        // Background keep-alive
+        requestWakeLock();
+        startSilentAudio();
+
         if (loadingOverlay) loadingOverlay.style.display = 'none';
     } catch (err) {
         console.error("Bluetooth connection error:", err);
@@ -377,6 +429,8 @@ function disconnectBluetooth() {
     }
     if (loadingOverlay) loadingOverlay.style.display = 'none';
     setStatus('Disconnected');
+    releaseWakeLock();
+    stopSilentAudio();
 }
 
 function onDisconnected() {
@@ -384,6 +438,8 @@ function onDisconnected() {
     setStatus('Disconnected');
     connectBtn.textContent = "Connect";
     updateRunningState(3);
+    releaseWakeLock();
+    stopSilentAudio();
     // Don't finish the session on disconnect - it can be resumed
     showToast('Disconnected - session will resume on reconnect');
 }
@@ -702,6 +758,21 @@ function handleNotification(event) {
     console.log("Parsed treadmill data:", treadmillData);
     updateDashboard(treadmillData);
     updateRunningState(running_state);
+
+    // Update Speed Slider UI (without sending command)
+    if (connected && currentSpeedKmh > 0) {
+        const speedVal = currentSpeedKmh.toFixed(1);
+        if (speedSlider.value !== speedVal) {
+            speedSlider.value = speedVal;
+            // Trigger MDL slider update if it's initialized
+            if (speedSlider.MaterialSlider) {
+                speedSlider.MaterialSlider.change(speedVal);
+            }
+            sliderValue.textContent = speedVal;
+            curTargetSpeed = Math.round(currentSpeedKmh * 1000);
+            updateCalUI();
+        }
+    }
     
     // Continue with session updates
     if (running_state === 1 && sessionActive && sessionStartData) {
@@ -1061,13 +1132,24 @@ function updateCalUI() {
     currentCalSpeedSpan.textContent = speedKey;
     
     const calibrations = loadCalibrations();
+    let rate;
     if (calibrations[speedKey]) {
-        calibratedRateSpan.textContent = calibrations[speedKey];
+        rate = calibrations[speedKey];
+        calibratedRateSpan.textContent = rate;
         calibratedRateSpan.style.color = "#388e3c"; // Green if manual
     } else {
-        const rate = Math.round(getCalibratedRate(speed));
+        rate = Math.round(getCalibratedRate(speed));
         calibratedRateSpan.textContent = rate + " (auto)";
         calibratedRateSpan.style.color = "#888";
+    }
+    
+    // Sync the manual adjustment slider to the current rate
+    if (calSlider.value != rate) {
+        calSlider.value = rate;
+        if (calSlider.MaterialSlider) {
+            calSlider.MaterialSlider.change(rate);
+        }
+        calSliderValue.textContent = rate;
     }
 }
 
